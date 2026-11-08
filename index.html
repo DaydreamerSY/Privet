@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Привет! · Học tiếng Nga</title>
+  <meta name="description" content="Ứng dụng học tiếng Nga cho người mới bắt đầu: bảng chữ cái, luyện viết tay, từ vựng và cấu trúc câu.">
+  <meta name="theme-color" content="#2f5bea">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%232f5bea'/%3E%3Ctext x='32' y='46' font-size='40' text-anchor='middle' fill='white' font-family='Segoe UI,Arial' font-weight='700'%3E%D0%AF%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#/home" aria-label="Trang chủ">
+      <span class="brand-logo" lang="ru">Я</span>
+      <span class="brand-text"><b lang="ru">Привет!</b><small>Học tiếng Nga</small></span>
+    </a>
+    <nav class="nav" id="nav" aria-label="Điều hướng chính"></nav>
+    <div class="top-stats" id="topStats"></div>
+  </header>
+
+  <main id="main" class="main"></main>
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+
+  <noscript><p style="padding:24px">Ứng dụng cần JavaScript để chạy.</p></noscript>
+
+  <!-- Lõi -->
+  <script src="js/core.js"></script>
+  <script src="js/lib/path.js"></script>
+  <!-- Dữ liệu -->
+  <script src="js/data/glyphs.js"></script>
+  <script src="js/data/alphabet.js"></script>
+  <script src="js/data/vocab.js"></script>
+  <script src="js/data/grammar.js"></script>
+  <script src="js/data/pronounce.js"></script>
+  <!-- Thư viện -->
+  <script src="js/lib/recognizer.js"></script>
+  <script src="js/lib/writingpad.js"></script>
+  <script src="js/lib/keyboard.js"></script>
+  <script src="js/lib/quiz.js"></script>
+  <script src="js/lib/speech.js"></script>
+  <script src="js/lib/sync.js"></script>
+  <!-- Màn hình -->
+  <script src="js/views/home.js"></script>
+  <script src="js/views/alphabet.js"></script>
+  <script src="js/views/vocab.js"></script>
+  <script src="js/views/grammar.js"></script>
+  <script src="js/views/speak.js"></script>
+  <script src="js/views/settings.js"></script>
+  <script src="js/views/debug.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
