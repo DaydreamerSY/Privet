@@ -208,7 +208,86 @@
     return gisPromise;
   }
   /** Tải sẵn thư viện để khi bấm thì cửa sổ Google mở ngay (không bị trình duyệt chặn) */
-  const preload = () => { if (available()) loadGis().catch(() => {}); };
+  const preload = () => { if (available() && !RU.isStandalone()) loadGis().catch(() => {}); };
+
+  /* ---- App đã cài (cửa sổ riêng / màn hình chính) — cùng cách làm với Coin Manager ----
+     Cửa sổ bật lên của Google mở ra tab trình duyệt riêng và mất liên lạc với app (đăng nhập xong
+     chỉ thấy màn hình trắng). Khi đó dùng trang chuyển tiếp oauth.html: Google chuyển về đó, trang này
+     đưa quyền truy cập về app qua BroadcastChannel + localStorage (đúng mã state mới nhận, app đọc xong
+     xoá ngay, tự hết hạn sau 5 phút). Địa chỉ oauth.html phải có trong «Authorized redirect URIs»
+     của OAuth client (Google Cloud → project coin-manager). */
+  const HANDOFF_KEY = 'privet-ru-oauth';        // trùng với js/oauth.js
+  const PENDING_KEY = 'privet-ru-oauth-pending';
+  const HANDOFF_TTL = 5 * 60000;
+  const redirectUri = () => new URL('oauth.html', location.href).href;
+  const readJson = (k) => { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } };
+  const drop = (k) => { try { localStorage.removeItem(k); } catch (e) { /* bỏ qua */ } };
+  {
+    const stale = readJson(HANDOFF_KEY); // quyền truy cập còn sót (app chưa kịp đọc) — không để nằm lâu trong trình duyệt
+    if (stale && !(Date.now() - stale.at < HANDOFF_TTL)) drop(HANDOFF_KEY);
+  }
+  const newState = () => (window.crypto && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2));
+
+  function acceptGrant(msg) {
+    if (msg.error) throw new Error(msg.error === 'access_denied' ? 'Bạn đã không cho phép app lưu vào Google Drive.' : 'Lỗi đăng nhập Google: ' + msg.error);
+    if (!String(msg.scope || '').split(' ').includes(SCOPE)) throw new Error('Bạn chưa đánh dấu ô cho phép app lưu vào Google Drive.');
+    token = { value: msg.access_token, exp: Date.now() + Number(msg.expires_in || 3600) * 1000 };
+    return token.value;
+  }
+  function takeHandoff(state) {
+    const msg = readJson(HANDOFF_KEY);
+    if (!msg || msg.state !== state || !(Date.now() - msg.at < HANDOFF_TTL)) return null;
+    drop(HANDOFF_KEY);
+    return msg;
+  }
+  /** App đã cài: mở trang đăng nhập Google trong trình duyệt, chờ oauth.html gửi quyền truy cập về */
+  function tokenViaRedirect() {
+    const state = newState();
+    try { localStorage.setItem(PENDING_KEY, JSON.stringify({ state, action: 'sync', at: Date.now() })); } catch (e) { /* bỏ qua */ }
+    const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+    const q = { client_id: CLIENT_ID, redirect_uri: redirectUri(), response_type: 'token', scope: SCOPE, state, include_granted_scopes: 'true' };
+    if (meta.email && meta.email.includes('@')) q.login_hint = meta.email;
+    url.search = new URLSearchParams(q).toString();
+    window.open(url.href, '_blank');
+    RU.toast('Đăng nhập Google trong cửa sổ vừa mở, xong thì quay lại app — đồng bộ sẽ tự chạy tiếp.', '', 6000);
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      let ch = null;
+      try { ch = new BroadcastChannel(HANDOFF_KEY); } catch (e) { ch = null; }
+      const check = () => take(takeHandoff(state));
+      const finish = (err, value) => {
+        if (settled) return;
+        settled = true;
+        if (ch) ch.close();
+        clearInterval(poll);
+        clearTimeout(timer);
+        document.removeEventListener('visibilitychange', check);
+        window.removeEventListener('focus', check);
+        drop(PENDING_KEY);
+        if (err) reject(err); else resolve(value);
+      };
+      function take(msg) {
+        if (!msg || msg.state !== state) return;
+        drop(HANDOFF_KEY);
+        try { finish(null, acceptGrant(msg)); } catch (e) { finish(e); }
+      }
+      if (ch) ch.onmessage = (e) => take(e.data);
+      document.addEventListener('visibilitychange', check);
+      window.addEventListener('focus', check);
+      const poll = setInterval(check, 1500);
+      const timer = setTimeout(() => finish(new Error('Hết thời gian chờ đăng nhập Google. Bấm đồng bộ lại.')), HANDOFF_TTL);
+    });
+  }
+  /** oauth.html mở ngay trong cửa sổ app rồi quay về (app tải lại, mất trạng thái): lấy quyền truy cập đang chờ */
+  function resumeAfterRedirect() {
+    const pending = readJson(PENDING_KEY);
+    if (!pending) return null;
+    if (!(Date.now() - pending.at < 2 * HANDOFF_TTL)) { drop(PENDING_KEY); return null; }
+    const msg = takeHandoff(pending.state);
+    if (!msg) return null;
+    drop(PENDING_KEY);
+    try { acceptGrant(msg); return { action: pending.action }; } catch (e) { return { action: pending.action, error: e.message }; }
+  }
 
   const POPUP_ERRORS = {
     popup_failed_to_open: 'Trình duyệt đã chặn cửa sổ đăng nhập Google. Hãy bấm lại một lần nữa (hoặc cho phép cửa sổ bật lên).',
@@ -217,6 +296,7 @@
   /** Phải gọi ngay khi người dùng vừa bấm: Google cần thao tác của người dùng để mở cửa sổ đăng nhập */
   async function getToken() {
     if (hasToken()) return token.value;
+    if (RU.isStandalone()) return tokenViaRedirect();
     const oauth2 = await loadGis();
     return new Promise((resolve, reject) => {
       const client = oauth2.initTokenClient({
@@ -310,9 +390,10 @@
 
   /* ============================ Đồng bộ ============================ */
   async function run(opts) {
-    setStatus('busy', 'Đang đồng bộ…');
+    setStatus('busy', !hasToken() && RU.isStandalone() ? 'Đang chờ đăng nhập Google… đăng nhập xong hãy quay lại app.' : 'Đang đồng bộ…');
     try {
       await getToken();
+      if (statusMsg !== 'Đang đồng bộ…') setStatus('busy', 'Đang đồng bộ…');
       if (!meta.email) { meta.email = (await whoAmI()) || 'Google'; saveMeta(); }
       dirty = false; // thay đổi xảy ra trong lúc đồng bộ sẽ bật lại cờ này
       const total = { n: 0, settings: [], replaced: false };
@@ -409,7 +490,7 @@
   }
   function describe() {
     switch (status) {
-      case 'busy': return 'Đang đồng bộ…';
+      case 'busy': return statusMsg || 'Đang đồng bộ…';
       case 'error': return statusMsg || 'Đồng bộ chưa xong.';
       case 'pending': return 'Có tiến độ mới chưa đưa lên Google Drive.';
       case 'ok': return 'Đã đồng bộ ' + ago(meta.lastSync) + '.';
@@ -458,6 +539,12 @@
   function init() {
     setStatus(idleStatus());
     if (meta.email) preload();
+    // App đã cài: đăng nhập xong ở oauth.html rồi quay về (app tải lại) → làm tiếp việc đồng bộ dở
+    const resumed = available() ? resumeAfterRedirect() : null;
+    if (resumed) {
+      if (resumed.error) { setStatus('error', resumed.error); RU.toast(resumed.error, 'bad', 5000); }
+      else setTimeout(() => syncNow({}), 0);
+    }
   }
 
   RU.Sync = {
@@ -472,6 +559,7 @@
     get onWebOrigin() { return location.origin === WEB_ORIGIN; },
     ONLINE_URL,
     init, preload, syncNow, disconnect, describe, ago, pill, notice,
-    _test: { mergeState, applyRemote, stable, sharedView, streakFrom },
+    HANDOFF_KEY,
+    _test: { mergeState, applyRemote, stable, sharedView, streakFrom, redirectUri },
   };
 })(window.RU = window.RU || {});

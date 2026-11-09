@@ -93,11 +93,47 @@
     return card;
   }
 
+  /* ---- Cài app ra desktop / màn hình chính */
+  function installCard(ctx) {
+    const card = h('section', { class: 'card settings install-card' });
+    const render = () => {
+      card.innerHTML = '';
+      card.append(h('h3', null, '📲 Cài app ra desktop / màn hình chính'));
+      if (RU.isStandalone()) {
+        card.append(h('p', null, '✓ Bạn đang dùng Привет! dạng app (cửa sổ riêng). Đồng bộ Google Drive sẽ mở trang đăng nhập trong trình duyệt — đăng nhập xong quay lại app là được.'));
+        return;
+      }
+      if (location.protocol === 'file:') {
+        card.append(h('div', { class: 'callout warn' }, 'Bản mở từ file trên máy không cài được. Hãy mở bản web rồi cài: ',
+          h('a', { href: RU.Sync.ONLINE_URL, target: '_blank', rel: 'noopener' }, RU.Sync.ONLINE_URL), '.'));
+        return;
+      }
+      const ev = RU.install.prompt;
+      const btn = ev ? h('button', { type: 'button', class: 'btn primary', onclick: () => {
+        RU.install.prompt = null;
+        ev.prompt();
+        ev.userChoice.then((c) => { if (c && c.outcome !== 'accepted') RU.toast('Chưa cài — bạn có thể cài lại bất cứ lúc nào.', ''); }).catch(() => {}).then(() => RU.emit('installable'));
+      } }, '📲 Cài app') : null;
+      RU.append(card, [
+        h('p', { class: 'small muted' }, 'Cài Привет! thành app riêng: có biểu tượng ở desktop / màn hình chính, mở trong cửa sổ riêng không có thanh địa chỉ, và mở được cả khi mất mạng (giọng đọc trực tuyến, chấm phát âm và đồng bộ vẫn cần mạng).'),
+        btn ? row('Cài ngay', 'Trình duyệt này cài được app chỉ với một lần bấm.', btn) : null,
+        h('ul', { class: 'small muted sync-facts' },
+          h('li', null, h('b', null, 'Chrome / Edge / Opera trên máy tính: '), 'bấm biểu tượng cài đặt ở cuối thanh địa chỉ, hoặc menu ⋮ → «Truyền, lưu và chia sẻ» → «Cài đặt trang dưới dạng ứng dụng» / «Tạo lối tắt…» (đánh dấu «Mở dưới dạng cửa sổ»).'),
+          h('li', null, h('b', null, 'Điện thoại Android: '), 'Chrome ⋮ → «Thêm vào màn hình chính» / «Cài đặt ứng dụng».'),
+          h('li', null, h('b', null, 'iPhone / iPad: '), 'Safari → nút Chia sẻ → «Thêm vào MH chính».')),
+      ]);
+    };
+    render();
+    ctx.onCleanup(RU.on('installable', render));
+    return card;
+  }
+
   RU.route('settings', (ctx) => {
     const main = ctx.main;
     const st = RU.state.settings;
     main.append(ui.header('Cài đặt', { icon: '⚙️' }));
     main.append(syncCard(ctx));
+    main.append(installCard(ctx));
 
     // ---- Giọng đọc
     const voiceBox = h('div');

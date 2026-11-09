@@ -9,6 +9,11 @@
 - Máy tính: mở bằng **Microsoft Edge** (có sẵn giọng đọc tiếng Nga tự nhiên), hoặc nháy đúp file **`Mo-app-Edge.bat`** — file này mở đúng trang trên bằng Edge (không có Edge thì dùng Google Chrome).
 - Điện thoại: mở bằng **Chrome** (Android) hoặc Safari (iPhone).
 - Bản web **đồng bộ được tiến độ giữa các máy** qua Google Drive (xem mục [Đồng bộ nhiều thiết bị](#đồng-bộ-nhiều-thiết-bị-google-drive)).
+- **Cài thành app** (biểu tượng ở desktop / màn hình chính, mở trong cửa sổ riêng, mở được cả khi mất mạng):
+  - Chrome / Edge / Opera trên máy tính: bấm biểu tượng cài đặt ở cuối thanh địa chỉ, hoặc menu ⋮ → *Truyền, lưu và chia sẻ* → *Cài đặt trang dưới dạng ứng dụng* / *Tạo lối tắt…* (đánh dấu *Mở dưới dạng cửa sổ*). Trong app cũng có nút **Cài app** ở **Cài đặt → 📲 Cài app**.
+  - Android: Chrome ⋮ → *Thêm vào màn hình chính* / *Cài đặt ứng dụng*. iPhone: Safari → Chia sẻ → *Thêm vào MH chính*.
+  - Chuột phải biểu tượng app (Windows) có lối tắt nhanh: Ôn tập từ vựng, Luyện phát âm, Kiểm tra viết tay, Cấu trúc câu.
+  - Khi mất mạng app vẫn mở được (bản lưu sẵn trong máy, tự cập nhật ở lần mở sau khi có bản mới). Giọng đọc trực tuyến, chấm phát âm và đồng bộ vẫn cần mạng.
 
 **Cách 2 — không cần mạng:** nháy đúp `index.html` để mở bản trên máy. Bản này không đồng bộ được; nếu trình duyệt mặc định là Vivaldi, Opera, Brave, Cốc Cốc… thì có thể **không nghe được phát âm** (xem mục Giọng đọc bên dưới).
 
@@ -18,7 +23,7 @@
 python -m http.server 8765
 ```
 
-sau đó vào http://localhost:8765
+sau đó vào http://localhost:8765 — ở localhost app không bật chế độ offline để luôn thấy code mới; thêm `?sw` vào địa chỉ nếu muốn thử offline.
 
 > Tiến độ học được lưu trong trình duyệt bạn dùng, theo từng địa chỉ: bản web, bản trên máy (cách 2) và bản chạy qua máy chủ nhỏ (cách 3) có tiến độ riêng. Muốn chuyển tiến độ giữa chúng, vào **Cài đặt → Xuất file / Nhập file**. Giữa các máy dùng bản web thì bật **đồng bộ Google Drive**.
 
@@ -83,6 +88,7 @@ Cách hoạt động ([js/lib/sync.js](js/lib/sync.js)):
 
 - Dùng chung **Google Cloud project của Coin Manager** (cùng OAuth client ID), nên cửa sổ Google hiện tên **«Coin Manager»**. Quyền `drive.appdata`: chỉ thư mục ẩn riêng của app — không hiện trong Drive, không đụng tới file nào khác. App này chỉ đọc / ghi đúng file `privet-ru-sync.json`; file `coin-manager-sync.json` của Coin Manager nằm cùng thư mục ẩn nhưng không bị đụng tới.
 - Không có máy chủ: quyền truy cập Google chỉ sống ~1 giờ và chỉ giữ trong bộ nhớ. Hết hạn thì nút ☁️ có chấm màu → bấm lại một lần.
+- **App đã cài** (cửa sổ riêng / màn hình chính) — cùng cách làm với Coin Manager: cửa sổ bật lên của Google sẽ mở ra tab trình duyệt riêng và mất liên lạc với app, nên app mở trang đăng nhập Google trong trình duyệt và Google chuyển về trang [`oauth.html`](oauth.html); trang này đưa quyền truy cập về app (BroadcastChannel + localStorage, kiểm tra mã `state`, app đọc xong xoá ngay, hết hạn sau 5 phút). Đăng nhập xong quay lại app là đồng bộ tự chạy tiếp; nếu app bị tải lại trong lúc đó thì khi mở lại cũng tự làm tiếp. Cần khai báo `https://daydreamersy.github.io/Privet/oauth.html` trong *Authorized redirect URIs* của OAuth client (Google Cloud Console → project coin-manager → APIs & Services → Credentials). Mở trong tab trình duyệt thường thì vẫn dùng cửa sổ đăng nhập của Google như cũ.
 - **Gộp tiến độ** (học xen kẽ nhiều máy không mất gì, đồng bộ lại bao nhiêu lần cũng được): điểm bài học / số sao cao nhất được giữ, từ vựng lấy theo lần ôn gần nhất, XP cộng theo từng máy, chuỗi ngày học tính lại từ XP. Cài đặt hiển thị và học tập theo lần đổi sau cùng; **giọng đọc và tốc độ đọc riêng từng máy**.
 - **Xóa tiến độ** khi đang đồng bộ → các máy khác cũng xóa ở lần đồng bộ tới. Máy mới kết nối lần đầu thì luôn được gộp, không mất tiến độ đang có.
 - Mở bằng file trên máy (`file://`, tức nháy đúp `index.html`) thì **không đồng bộ được**: Google chỉ cho đăng nhập từ địa chỉ web đã khai báo trong OAuth client (`https://daydreamersy.github.io`). Muốn mang tiến độ cũ sang bản web: **Xuất file** ở bản trên máy → **Nhập file** ở bản web.
@@ -95,6 +101,10 @@ Cách hoạt động ([js/lib/sync.js](js/lib/sync.js)):
 ```
 Mo-app-Edge.bat       mở bản web bằng Edge (có giọng đọc tiếng Nga, đồng bộ được)
 index.html            trang chính
+manifest.webmanifest  khai báo app để cài ra desktop / màn hình chính (tên, biểu tượng, lối tắt)
+sw.js                 lưu sẵn app trong máy để mở được khi mất mạng (chỉ bật trên bản web)
+oauth.html, js/oauth.js  trang Google chuyển về khi đăng nhập trong app đã cài
+icons/                biểu tượng app (PNG thường, maskable cho Android, Apple)
 css/style.css         giao diện
 js/core.js            nền tảng: lưu tiến độ, giọng đọc, phiên âm, điều hướng
 js/lib/path.js        đọc đường nét SVG

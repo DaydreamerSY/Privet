@@ -229,6 +229,10 @@
     return deviceId;
   };
 
+  /** Đang chạy dạng app đã cài (cửa sổ riêng / màn hình chính), không phải tab trình duyệt */
+  RU.isStandalone = () => ['standalone', 'minimal-ui', 'fullscreen', 'window-controls-overlay']
+    .some((m) => !!(window.matchMedia && window.matchMedia('(display-mode: ' + m + ')').matches)) || navigator.standalone === true;
+
   const store = RU.store = {
     DEFAULTS,
     /** Đọc tiến độ từ trình duyệt (hoặc từ obj nếu có, ví dụ bản trên Google Drive) */

@@ -728,6 +728,7 @@ html.ws-lock, html.ws-lock body { overflow: hidden; overscroll-behavior: none; }
 .sync-state.pending { color: var(--warn); }
 .sync-state.error { color: var(--bad); }
 .sync-callout { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px 14px; }
+.oauth-card { max-width: 440px; margin: 12vh auto 0; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
 .sync-callout-text { flex: 1 1 240px; }
 
 /* ---------------- Thông báo ---------------- */
