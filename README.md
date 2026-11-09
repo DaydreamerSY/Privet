@@ -33,6 +33,7 @@ sau đó vào http://localhost:8765
   - *Tô theo mẫu*: chấm theo độ phủ nét và độ chính xác.
   - *Tự viết*: máy **nhận dạng chữ viết tay** và so với cả 33 chữ (hoa + thường), không bắt buộc đúng thứ tự hay chiều nét. Máy nhắc lỗi cụ thể, ví dụ: quên dấu ˘ của Й, quên hai chấm của Ё, quên đuôi của Щ / Ц, viết И thành Н, viết chữ hoa khi đề bài yêu cầu chữ thường…
   - Độ khó chấm chỉnh được trong Cài đặt (Dễ / Vừa / Khó).
+  - **Trên điện thoại / máy tính bảng:** trong trang chỉ có ô xem trước (vuốt qua vẫn cuộn trang bình thường), chạm vào ô mới mở **bảng viết toàn màn hình** có nút Hoàn tác, Xóa, Kiểm tra. Trong chuỗi bài luyện viết, viết đúng thì bấm **Tiếp** ngay trong bảng để sang chữ sau. Nút Back của điện thoại đóng bảng viết chứ không rời trang.
 - **Kiểm tra viết tay**: nghe âm → tự viết chữ từ trí nhớ.
 - Bảng quy tắc phát âm quan trọng (trọng âm, о → a, phụ âm cuối bị «điếc»…).
 

@@ -40,7 +40,7 @@
 
     const canvas = h('canvas', { class: 'pad-canvas', 'aria-label': 'Bảng viết chữ' });
     const wrap = h('div', { class: 'pad' }, canvas);
-    const ctx = canvas.getContext('2d');
+    let ctx = canvas.getContext('2d');
 
     function centerX() {
       const b = glyph ? glyph.bounds : { minX: 0, maxX: 60 };
@@ -110,7 +110,7 @@
     function redraw() {
       if (!lastW) return;
       ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
       const k = scale * dpr;
       ctx.setTransform(k, 0, 0, k, -x0 * k, -VIEW.y0 * k);
       ctx.fillStyle = css('--pad-band', 'rgba(47,91,234,.045)');
@@ -171,8 +171,19 @@
     requestAnimationFrame(() => layout(true));
     setTimeout(() => layout(), 80);   // dự phòng khi trang đang ẩn (rAF bị tạm dừng)
 
+    /** Vẽ y hệt bảng (dòng kẻ, nét mờ, nét đã viết) lên một canvas khác — dùng cho ô xem trước */
+    function paintTo(target, size) {
+      const d = Math.min(2, window.devicePixelRatio || 1);
+      const px = Math.round(size * d);
+      if (target.width !== px || target.height !== px) { target.width = px; target.height = px; }
+      const saved = [ctx, lastW, dpr, scale, x0];
+      ctx = target.getContext('2d'); lastW = size; dpr = d; scale = size / VIEW.w; x0 = centerX() - VIEW.w / 2;
+      try { redraw(); } finally { [ctx, lastW, dpr, scale, x0] = saved; }
+    }
+
     return {
       el: wrap,
+      paintTo,
       strokes: () => strokes.map((st) => st.slice()),
       isEmpty: () => strokes.length === 0,
       clear() { strokes.length = 0; ink = 'normal'; redraw(); if (opts.onChange) opts.onChange(); },
@@ -236,6 +247,146 @@
     }
     if (opts.autoplay !== false) requestAnimationFrame(play);
     return { el: svg, play, stop };
+  };
+
+  /* =====================================================================
+     Bảng viết dạng cửa sổ nổi (điện thoại, màn hình cảm ứng)
+     Bảng viết phải chặn cử chỉ vuốt để vẽ, nên nếu nằm giữa trang thì đặt ngón tay lên là
+     không cuộn được trang. Vì vậy trên điện thoại: trong trang chỉ có ô xem trước (cuộn thoải
+     mái), chạm vào mới mở bảng viết toàn màn hình. Dùng chung một cửa sổ cho mọi bài viết.
+     ===================================================================== */
+  const mq = (q) => !!(window.matchMedia && window.matchMedia(q).matches);
+  const WS = RU.WriteSheet = {
+    /** Dùng cửa sổ nổi khi màn hình cảm ứng hoặc màn hình hẹp */
+    wanted: () => mq('(pointer: coarse)') || mq('(max-width: 760px)'),
+    isOpen: false,
+    cfg: null,
+  };
+  let wsEl = null; let wsHead = null; let wsSlot = null; let wsFb = null; let wsPrimary = null;
+  let pushed = false; let backPending = false; let releaseTimer = null;
+
+  function fit() {
+    if (!WS.isOpen || !WS.cfg) return;
+    const w = wsSlot.clientWidth; const hh = wsSlot.clientHeight;
+    if (!w || !hh) return;
+    WS.cfg.pad.el.style.width = Math.max(150, Math.floor(Math.min(w, hh))) + 'px';
+    WS.cfg.pad.layout();
+  }
+  function onPop() {
+    if (backPending) { // trả lại mục lịch sử của lần đóng trước
+      backPending = false;
+      if (WS.isOpen && !pushed) { try { history.pushState({ ws: true }, ''); pushed = true; } catch (e) { /* bỏ qua */ } }
+      return;
+    }
+    if (WS.isOpen) { pushed = false; WS.close(); } // nút Back của điện thoại → đóng bảng viết, không rời trang
+  }
+  function onKey(e) {
+    if (!WS.isOpen) return;
+    if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); WS.close(); } else if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault(); e.stopImmediatePropagation();
+      const p = WS.cfg && WS.cfg.current;
+      if (p && p.onClick) p.onClick();
+    }
+  }
+  function build() {
+    wsHead = h('div', { class: 'ws-head-main' });
+    wsSlot = h('div', { class: 'ws-pad' });
+    wsFb = h('div', { class: 'ws-fb', 'aria-live': 'polite' });
+    wsPrimary = h('button', { type: 'button', class: 'btn primary' });
+    wsPrimary.addEventListener('click', () => { const p = WS.cfg && WS.cfg.current; if (p && p.onClick) p.onClick(); });
+    const box = h('div', { class: 'ws', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Bảng viết' },
+      h('div', { class: 'ws-head' }, wsHead,
+        h('button', { type: 'button', class: 'icon-btn ws-close', title: 'Đóng bảng viết', 'aria-label': 'Đóng bảng viết', onclick: () => WS.close() }, RU.icon('x'))),
+      wsSlot, wsFb,
+      h('div', { class: 'ws-tools' },
+        h('button', { type: 'button', class: 'btn ghost', onclick: () => WS.cfg && WS.cfg.pad.undo() }, RU.icon('undo', 18), ' Hoàn tác'),
+        h('button', { type: 'button', class: 'btn ghost', onclick: () => WS.cfg && WS.cfg.pad.clear() }, RU.icon('trash', 18), ' Xóa'),
+        wsPrimary));
+    wsEl = h('div', { class: 'ws-overlay', hidden: true }, box);
+    wsEl.addEventListener('click', (e) => { if (e.target === wsEl) WS.close(); });
+    document.body.appendChild(wsEl);
+    window.addEventListener('resize', fit);
+    window.addEventListener('popstate', onPop);
+    window.addEventListener('keydown', onKey, true);
+  }
+
+  /**
+   * Mở (hoặc chuyển sang) bảng viết. cfg: { pad, head: () => Node, primary: { label, icon, kind, onClick }, onClose() }
+   */
+  WS.open = function (cfg) {
+    clearTimeout(releaseTimer);
+    if (!wsEl) build();
+    const prev = WS.cfg;
+    WS.cfg = cfg;
+    wsHead.innerHTML = '';
+    RU.append(wsHead, [typeof cfg.head === 'function' ? cfg.head() : cfg.head]);
+    wsSlot.innerHTML = '';
+    wsSlot.appendChild(cfg.pad.el);
+    WS.feedback(cfg.fb ? cfg.fb.node : null, cfg.fb ? cfg.fb.kind : '');
+    WS.setPrimary(cfg.current || cfg.primary);
+    if (!WS.isOpen) {
+      WS.isOpen = true;
+      wsEl.hidden = false;
+      document.documentElement.classList.add('ws-lock');
+      if (!pushed && !backPending) { try { history.pushState({ ws: true }, ''); pushed = true; } catch (e) { pushed = false; } }
+    }
+    if (prev && prev !== cfg && prev.onClose) prev.onClose();
+    fit();
+    setTimeout(fit, 40);
+  };
+
+  WS.close = function () {
+    if (!WS.isOpen) return;
+    WS.isOpen = false;
+    wsEl.hidden = true;
+    document.documentElement.classList.remove('ws-lock');
+    if (pushed) {
+      pushed = false;
+      // chỉ lùi lịch sử khi vẫn đang ở mục do bảng viết thêm vào (không lỡ quay về trang trước)
+      if (history.state && history.state.ws) { backPending = true; history.back(); }
+    }
+    if (WS.cfg && WS.cfg.onClose) WS.cfg.onClose();
+  };
+
+  /** Bài viết bị huỷ (sang bài khác, rời trang): đóng cửa sổ nếu đang hiện bài đó — trừ khi ngay sau đó mở bài mới */
+  WS.release = function (cfg) {
+    if (!cfg || WS.cfg !== cfg) return;
+    clearTimeout(releaseTimer);
+    releaseTimer = setTimeout(() => { if (WS.cfg === cfg) { WS.close(); WS.cfg = null; } }, 0);
+  };
+
+  /** Lời nhận xét hiện dưới bảng viết (kind: 'ok' | 'bad'); nhớ lại để lần mở sau vẫn thấy */
+  WS.feedback = function (node, kind) {
+    if (WS.cfg) WS.cfg.fb = node ? { node, kind } : null;
+    if (!wsFb) return;
+    wsFb.innerHTML = '';
+    wsFb.className = 'ws-fb' + (kind ? ' ' + kind : '');
+    if (node) RU.append(wsFb, [node]);
+  };
+
+  /** Nút chính ở góc dưới (Kiểm tra → Tiếp / Xong) */
+  WS.setPrimary = function (p) {
+    if (!p) return;
+    if (WS.cfg) WS.cfg.current = p;
+    if (!wsPrimary) return;
+    wsPrimary.innerHTML = '';
+    wsPrimary.className = 'btn ' + (p.kind || 'primary');
+    RU.append(wsPrimary, [p.icon ? RU.icon(p.icon, 18) : null, (p.icon ? ' ' : '') + p.label]);
+  };
+
+  /** Ô xem trước đặt trong trang: chạm để mở bảng viết; không chặn vuốt nên trang cuộn bình thường */
+  WS.preview = function (pad, onOpen) {
+    const cv = h('canvas', { class: 'pp-canvas', 'aria-hidden': 'true' });
+    const label = h('span', { class: 'pp-label' });
+    const el = h('button', { type: 'button', class: 'pad-preview', 'aria-label': 'Mở bảng viết' }, cv, label);
+    el.addEventListener('click', onOpen);
+    const update = () => {
+      pad.paintTo(cv, Math.round(el.clientWidth) || 240);
+      label.textContent = pad.isEmpty() ? '✍️ Chạm để viết' : '✍️ Chạm để viết tiếp';
+    };
+    update();
+    setTimeout(update, 60); // vẽ lại đúng kích thước khi ô đã nằm trong trang
+    return { el, update };
   };
 
   RU.PAD_LINES = LINES;

@@ -213,26 +213,53 @@
       if (q.autoplay !== false) setTimeout(() => RU.tts.speak(q.speak), 350);
     }
     let checkBtn = null;
-    const pad = RU.WritingPad({ glyph, mode: 'free', onChange: () => { if (checkBtn) checkBtn.disabled = pad.isEmpty(); } });
-    const tools = h('div', { class: 'pad-tools' },
-      h('button', { type: 'button', class: 'btn ghost sm', onclick: () => pad.undo() }, RU.icon('undo', 16), ' Hoàn tác'),
-      h('button', { type: 'button', class: 'btn ghost sm', onclick: () => pad.clear() }, RU.icon('trash', 16), ' Xóa'));
-    wrap.append(h('div', { class: 'pad-box' }, pad.el, tools));
-    api.body.append(wrap);
-    api.onDestroy(() => pad.destroy());
-    api.skip('Không nhớ', () => {
-      api.done(false, { node: h('div', { class: 'write-fb-model' }, h('span', null, 'Chữ cần viết:'), RU.StrokeAnim(glyph, { size: 'sm' }).el) });
-    });
-    checkBtn = api.check('Kiểm tra', () => {
+    // Điện thoại / màn hình cảm ứng: trong trang chỉ có ô xem trước, chạm vào mới mở bảng viết toàn màn hình
+    const WS = RU.WriteSheet;
+    const useSheet = WS.wanted();
+    let preview = null;
+    let sheetCfg = null;
+    const pad = RU.WritingPad({ glyph, mode: 'free', onChange: () => { if (checkBtn) checkBtn.disabled = pad.isEmpty(); if (preview) preview.update(); } });
+    /** Đã trả lời xong: đóng cửa sổ viết, ô xem trước chỉ còn để xem (không mở lại để viết) */
+    const finishWriting = () => {
+      if (sheetCfg && WS.isOpen && WS.cfg === sheetCfg) WS.close();
+      if (preview) { preview.el.disabled = true; preview.update(); }
+    };
+    const doCheck = () => {
       const r = RU.Recog.verify(pad.strokes(), L.u, cs);
       if (r.empty) { RU.toast(r.msg); return; }
       pad.setInk(r.ok ? 'ok' : 'bad');
+      finishWriting(); // kết quả hiện ở thanh dưới của bài tập
       if (q.onWrite) q.onWrite(r);
       const node = r.ok
         ? h('div', { class: 'write-fb' }, ui.stars(r.stars), r.hint ? h('p', { class: 'muted' }, r.hint) : null)
         : h('div', { class: 'write-fb' }, h('p', null, r.msg), h('div', { class: 'write-fb-model' }, h('span', null, 'Mẫu đúng:'), RU.StrokeAnim(glyph, { size: 'sm' }).el));
       api.done(r.ok, { title: r.ok ? r.msg : 'Chưa đúng', node });
+    };
+    if (useSheet) {
+      sheetCfg = {
+        pad,
+        primary: { label: 'Kiểm tra', icon: 'check', onClick: doCheck },
+        head: () => h('div', { class: 'ws-task' },
+          h('div', { class: 'ws-title' }, q.label || 'Viết chữ cái lên bảng'),
+          q.prompt ? h('div', { class: 'ws-prompt' }, typeof q.prompt === 'string' ? q.prompt : q.prompt.cloneNode(true)) : null,
+          q.speak ? h('div', { class: 'ws-model' }, ui.speak(q.speak)) : null),
+        onClose: () => preview && preview.update(),
+      };
+      preview = WS.preview(pad, () => WS.open(sheetCfg));
+      wrap.append(h('div', { class: 'pad-box' }, preview.el));
+    } else {
+      const tools = h('div', { class: 'pad-tools' },
+        h('button', { type: 'button', class: 'btn ghost sm', onclick: () => pad.undo() }, RU.icon('undo', 16), ' Hoàn tác'),
+        h('button', { type: 'button', class: 'btn ghost sm', onclick: () => pad.clear() }, RU.icon('trash', 16), ' Xóa'));
+      wrap.append(h('div', { class: 'pad-box' }, pad.el, tools));
+    }
+    api.body.append(wrap);
+    api.onDestroy(() => { pad.destroy(); if (sheetCfg) WS.release(sheetCfg); });
+    api.skip('Không nhớ', () => {
+      finishWriting();
+      api.done(false, { node: h('div', { class: 'write-fb-model' }, h('span', null, 'Chữ cần viết:'), RU.StrokeAnim(glyph, { size: 'sm' }).el) });
     });
+    checkBtn = api.check('Kiểm tra', doCheck);
   };
 
   /* ============================ Bộ máy ============================ */

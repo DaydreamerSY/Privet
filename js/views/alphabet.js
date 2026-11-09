@@ -277,7 +277,8 @@
   /* ======================= Luyện viết ======================= */
   /**
    * Bảng viết một chữ: chế độ tô (trace) hoặc tự viết (free).
-   * opts: { i, cs, mode, onSuccess(res), compact, switchable }
+   * Trên điện thoại / màn hình cảm ứng: trong trang chỉ có ô xem trước, chạm vào mới mở bảng viết toàn màn hình.
+   * opts: { i, cs, mode, onSuccess(res), switchable, next(openSheet), nextLabel }
    */
   function writeTask(opts) {
     const L = LET[opts.i];
@@ -285,8 +286,20 @@
     let mode = opts.mode || 'trace';
     let glyph = RU.Glyphs.get(L.u, cs);
     let checked = false;
+    const WS = RU.WriteSheet;
+    const useSheet = WS.wanted();
+    let preview = null;
+    let sheetCfg = null;
+    const CHECK = { label: 'Kiểm tra', icon: 'check', onClick: () => check() };
+    const sheetOpen = () => !!sheetCfg && WS.isOpen && WS.cfg === sheetCfg;
     const fb = h('div', { class: 'write-feedback', 'aria-live': 'polite' });
-    const pad = RU.WritingPad({ glyph, mode, onChange: () => { if (checked) { checked = false; fb.innerHTML = ''; fb.className = 'write-feedback'; } } });
+    const pad = RU.WritingPad({ glyph, mode, onChange: () => {
+      if (checked) {
+        checked = false; fb.innerHTML = ''; fb.className = 'write-feedback';
+        if (sheetCfg) { sheetCfg.fb = null; sheetCfg.current = CHECK; if (sheetOpen()) { WS.feedback(null); WS.setPrimary(CHECK); } }
+      }
+      if (preview) preview.update();
+    } });
     const animBox = h('div', { class: 'model-anim', title: 'Nhấn để xem lại thứ tự nét', onclick: () => anim && anim.play() });
     let anim = null;
     const modelChar = h('div', { class: 'model-char', lang: 'ru' });
@@ -308,7 +321,7 @@
       caseBtns.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.v === cs));
     }
     [['trace', 'Tô theo mẫu'], ['free', 'Tự viết']].forEach(([v, label]) => modeBtns.append(h('button', { type: 'button', dataset: { v }, onclick: () => { mode = v; pad.setMode(mode); pad.clear(); setupModel(); } }, label)));
-    [['u', 'Chữ hoa ' + L.u], ['l', 'Chữ thường ' + L.l]].forEach(([v, label]) => caseBtns.append(h('button', { type: 'button', dataset: { v }, onclick: () => { cs = v; glyph = RU.Glyphs.get(L.u, cs); pad.setGlyph(glyph); setupModel(); fb.innerHTML = ''; } }, label)));
+    [['u', 'Chữ hoa ' + L.u], ['l', 'Chữ thường ' + L.l]].forEach(([v, label]) => caseBtns.append(h('button', { type: 'button', dataset: { v }, onclick: () => { cs = v; glyph = RU.Glyphs.get(L.u, cs); pad.setGlyph(glyph); setupModel(); fb.innerHTML = ''; fb.className = 'write-feedback'; checked = false; if (sheetCfg) { sheetCfg.fb = null; sheetCfg.current = CHECK; } if (preview) preview.update(); } }, label)));
 
     const check = () => {
       const r = mode === 'trace' ? RU.Recog.trace(pad.strokes(), glyph) : RU.Recog.verify(pad.strokes(), L.u, cs);
@@ -322,6 +335,16 @@
         mode === 'free' && r.best ? h('div', { class: 'muted small' }, 'Máy đọc được: ', h('b', { lang: 'ru' }, r.best.cs === 'u' ? r.best.letter : r.best.letter.toLowerCase()), ' · độ giống ' + r.pct + '%') : null,
         mode === 'trace' ? h('div', { class: 'muted small' }, 'Độ phủ nét ' + Math.round(r.cov * 100) + '% · độ chính xác ' + Math.round(r.prec * 100) + '%') : null]);
       RU.sfx.play(r.ok ? 'ok' : 'bad');
+      if (sheetCfg) {
+        // nhận xét ngắn ngay dưới bảng viết; viết đúng thì nút chính thành «Tiếp» (trong chuỗi bài) hoặc «Xong»
+        sheetCfg.fb = { kind: r.ok ? 'ok' : 'bad', node: h('div', { class: 'wf-head' }, r.ok ? ui.stars(r.stars) : h('span', { class: 'wf-x' }, '✗'),
+          h('div', null, h('b', null, r.msg), r.hint ? h('div', { class: 'small muted' }, r.hint) : null)) };
+        sheetCfg.current = !r.ok ? CHECK
+          : opts.next ? { label: opts.nextLabel || 'Tiếp', icon: 'right', kind: 'ok', onClick: () => opts.next(true) }
+            : { label: 'Xong', icon: 'check', kind: 'ok', onClick: () => WS.close() };
+        if (sheetOpen()) { WS.feedback(sheetCfg.fb.node, sheetCfg.fb.kind); WS.setPrimary(sheetCfg.current); }
+      }
+      if (preview) preview.update();
       if (r.ok) {
         const s = stat(L.u);
         if (cs === 'u') s.wu++; else s.wl++;
@@ -331,13 +354,32 @@
       } else if (opts.onFail) opts.onFail(r);
     };
 
-    const tools = h('div', { class: 'pad-tools' },
-      h('button', { type: 'button', class: 'btn ghost sm', onclick: () => pad.undo() }, RU.icon('undo', 16), ' Hoàn tác'),
-      h('button', { type: 'button', class: 'btn ghost sm', onclick: () => pad.clear() }, RU.icon('trash', 16), ' Xóa'),
-      h('button', { type: 'button', class: 'btn primary', onclick: check }, RU.icon('check', 18), ' Kiểm tra'));
+    /* Cửa sổ viết (điện thoại): tiêu đề + chữ mẫu nhỏ ở trên, bảng viết ở giữa, nút bấm ở dưới tầm ngón cái */
+    const sheetHead = () => {
+      const a = RU.StrokeAnim(glyph, { size: 'sm' });
+      return h('div', { class: 'ws-task' },
+        h('div', { class: 'ws-title' }, mode === 'trace' ? 'Tô theo mẫu' : 'Tự viết', ' · ', cs === 'u' ? 'chữ hoa ' : 'chữ thường ', h('b', { lang: 'ru' }, glyph.char)),
+        h('div', { class: 'ws-model' },
+          h('div', { class: 'model-char', lang: 'ru' }, glyph.char),
+          h('div', { class: 'model-anim', title: 'Nhấn để xem lại thứ tự nét', onclick: () => a.play() }, a.el),
+          h('button', { type: 'button', class: 'btn soft sm', onclick: () => RU.tts.speak(L.name) }, RU.icon('volume', 16), ' ', ui.ru(L.name))));
+    };
+    const openSheet = () => {
+      if (!useSheet) return;
+      if (!sheetCfg) sheetCfg = { pad, primary: CHECK, head: sheetHead, onClose: () => preview && preview.update() };
+      WS.open(sheetCfg);
+    };
+    if (useSheet) preview = WS.preview(pad, openSheet);
 
-    const el = h('div', { class: 'write-task' },
-      h('div', { class: 'write-main' }, h('div', { class: 'pad-box' }, pad.el, tools), fb),
+    const tools = useSheet
+      ? h('div', { class: 'pad-tools' }, h('button', { type: 'button', class: 'btn primary', onclick: check }, RU.icon('check', 18), ' Kiểm tra'))
+      : h('div', { class: 'pad-tools' },
+        h('button', { type: 'button', class: 'btn ghost sm', onclick: () => pad.undo() }, RU.icon('undo', 16), ' Hoàn tác'),
+        h('button', { type: 'button', class: 'btn ghost sm', onclick: () => pad.clear() }, RU.icon('trash', 16), ' Xóa'),
+        h('button', { type: 'button', class: 'btn primary', onclick: check }, RU.icon('check', 18), ' Kiểm tra'));
+
+    const el = h('div', { class: 'write-task' + (useSheet ? ' sheet-mode' : '') },
+      h('div', { class: 'write-main' }, h('div', { class: 'pad-box' }, useSheet ? preview.el : pad.el, tools), fb),
       h('div', { class: 'write-side card' },
         opts.switchable !== false ? h('div', { class: 'write-switch' }, caseBtns, modeBtns) : null,
         h('div', { class: 'model-row' }, modelChar, h('div', { class: 'model-meta' }, caption, h('button', { type: 'button', class: 'btn soft sm', onclick: () => RU.tts.speak(L.name) }, RU.icon('volume', 16), ' ', ui.ru(L.name)))),
@@ -345,7 +387,7 @@
         h('button', { type: 'button', class: 'btn ghost sm', onclick: () => anim && anim.play() }, RU.icon('play', 14), ' Xem lại thứ tự nét'),
         tip));
     setupModel();
-    return { el, destroy() { pad.destroy(); if (anim) anim.stop(); }, check, pad };
+    return { el, destroy() { pad.destroy(); if (anim) anim.stop(); if (sheetCfg) WS.release(sheetCfg); }, check, pad, openSheet };
   }
 
   RU.route('alphabet/write/:i', (ctx) => {
@@ -398,21 +440,30 @@
           h('a', { class: 'btn primary', href: ok ? '#/alphabet/lesson/' + l.id + '/read' : '#/alphabet/lesson/' + l.id }, ok ? 'Sang tập đọc 📖' : 'Về bài học'))));
     };
 
-    const render = () => {
+    /** Sang bài kế tiếp; openSheet: đang viết trong cửa sổ (điện thoại) thì mở luôn bài sau */
+    const advance = (openSheet) => {
+      if (okThis) passed++;
+      pos++;
+      if (pos >= tasks.length) finish(); else render(openSheet);
+    };
+    const render = (openSheet) => {
       if (current) current.destroy();
       okThis = false;
       const t = tasks[pos];
       const L = LET[t.i];
+      const last = pos === tasks.length - 1;
       top.innerHTML = '';
       top.append(ui.progress(pos / tasks.length), h('div', { class: 'flow-label' },
         h('b', null, (pos + 1) + '/' + tasks.length), ' · ', t.mode === 'trace' ? 'Tô theo mẫu ' : 'Tự viết ', h('b', { lang: 'ru' }, t.cs === 'u' ? L.u : L.l),
         ' (', t.cs === 'u' ? 'chữ hoa' : 'chữ thường', ')'));
-      const nextBtn = h('button', { type: 'button', class: 'btn primary', disabled: true, onclick: () => { if (okThis) passed++; pos++; if (pos >= tasks.length) finish(); else render(); } }, pos === tasks.length - 1 ? 'Hoàn thành' : 'Tiếp', ' ', RU.icon('right', 18));
-      current = writeTask({ i: t.i, cs: t.cs, mode: t.mode, switchable: false, onSuccess: () => { okThis = true; nextBtn.disabled = false; } });
+      const nextBtn = h('button', { type: 'button', class: 'btn primary', disabled: true, onclick: () => advance(false) }, last ? 'Hoàn thành' : 'Tiếp', ' ', RU.icon('right', 18));
+      current = writeTask({ i: t.i, cs: t.cs, mode: t.mode, switchable: false, next: advance, nextLabel: last ? 'Hoàn thành' : 'Tiếp',
+        onSuccess: () => { okThis = true; nextBtn.disabled = false; } });
       holder.innerHTML = '';
       holder.append(current.el);
       nav.innerHTML = '';
-      nav.append(h('button', { type: 'button', class: 'btn ghost', onclick: () => { pos++; if (pos >= tasks.length) finish(); else render(); } }, 'Bỏ qua'), nextBtn);
+      nav.append(h('button', { type: 'button', class: 'btn ghost', onclick: () => { okThis = false; advance(false); } }, 'Bỏ qua'), nextBtn);
+      if (openSheet) current.openSheet();
       if (pos === 0 || tasks[pos - 1].i !== t.i) setTimeout(() => RU.tts.speak(L.name), 300);
     };
     RU.onKey(ctx, (e) => {
