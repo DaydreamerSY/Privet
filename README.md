@@ -33,7 +33,7 @@ sau đó vào http://localhost:8765 — ở localhost app không bật chế đ�
 
 ### 1. Bảng chữ cái (33 chữ)
 - 5 bài, đi từ dễ đến khó: chữ quen thuộc → «bạn giả» (В, Н, Р, С, У, Х) → phụ âm mới → nguyên âm đặc biệt → âm xuýt và hai dấu.
-- Mỗi bài có 4 bước: **Làm quen** (âm đọc, mẹo phát âm kiểu Việt, ví dụ, hoạt ảnh thứ tự nét) → **Trắc nghiệm** → **Luyện viết** → **Tập đọc** (các từ chỉ dùng chữ đã học).
+- Mỗi bài có 4 bước: **Làm quen** (âm đọc, mẹo phát âm kiểu Việt, ví dụ, hoạt ảnh thứ tự nét) → **Trắc nghiệm** → **Luyện viết** → **Tập đọc** (các từ chỉ dùng chữ đã học), rồi **Kiểm tra tổng hợp** (xem mục [Kiểm tra tổng hợp](#kiểm-tra-tổng-hợp-sau-mỗi-bài)).
 - **Luyện viết trên bảng (canvas)** với dòng kẻ ô li:
   - *Tô theo mẫu*: chấm theo độ phủ nét và độ chính xác.
   - *Tự viết*: máy **nhận dạng chữ viết tay** và so với cả 33 chữ (hoa + thường), không bắt buộc đúng thứ tự hay chiều nét. Máy nhắc lỗi cụ thể, ví dụ: quên dấu ˘ của Й, quên hai chấm của Ё, quên đuôi của Щ / Ц, viết И thành Н, viết chữ hoa khi đề bài yêu cầu chữ thường…
@@ -59,8 +59,21 @@ sau đó vào http://localhost:8765 — ở localhost app không bật chế đ�
 - Mỗi từ / câu có dòng **«Đọc gần đúng»** — cách người Nga thực sự đọc (молоко́ → [малако́], хлеб → [хлеп], что → [што]…) và nguyên âm mang trọng âm được tô đỏ.
 - **Cặp âm dễ nhầm** (ы/и, ж/ш, ш/щ, з/с, л/р, phụ âm mềm, hữu thanh/vô thanh): nói từng từ — nếu máy nghe thành từ kia, app chỉ ra âm cần sửa. Có thêm bài **luyện nghe phân biệt**.
 - Luyện theo bài chữ cái, theo chủ đề từ vựng, theo câu mẫu ngữ pháp, hoặc trộn ngẫu nhiên.
-- Máy chấm dùng dịch vụ nhận dạng giọng nói của trình duyệt: **chạy trên Edge và Chrome, cần mạng và micro**. Lần đầu trình duyệt sẽ hỏi quyền dùng micro — chọn «Cho phép». Trình duyệt không hỗ trợ (Vivaldi, Firefox…) vẫn ghi âm được để bạn tự nghe lại.
+- Máy chấm dùng dịch vụ nhận dạng giọng nói của trình duyệt: **chạy trên Edge và Chrome, cần mạng và micro**. Lần đầu trình duyệt sẽ hỏi quyền dùng micro — chọn «Cho phép».
+- **Opera, Vivaldi, Brave, Cốc Cốc** có nút micro nhưng không có dịch vụ nhận dạng phía sau (micro ghi được tiếng, máy chấm luôn trả về rỗng) → app nhận ra các trình duyệt này, nói rõ ngay từ đầu và **chỉ ghi âm** để bạn nghe lại, so sánh với giọng mẫu. Firefox cũng chỉ ghi âm.
+- Trình duyệt lạ: app đo độ to của micro. Micro thu được tiếng mà máy không nhận ra chữ nào 2 lần liền → coi như trình duyệt không chấm được và chuyển sang chỉ ghi âm. Micro gần như im lặng → nhắc kiểm tra micro, không báo nhầm là «máy không nghe thấy».
 - Lưu ý: máy chấm cho biết máy *có nghe ra đúng từ* hay không, không chấm từng âm như giáo viên — hãy kết hợp nghe lại giọng mình.
+
+### Kiểm tra tổng hợp sau mỗi bài
+- Có ở mọi bài chữ cái (bước 5), mọi chủ đề từ vựng (thẻ **📝 Kiểm tra**) và mọi bài cấu trúc câu (khung **📝 Kiểm tra tổng hợp** dưới phần luyện tập).
+- **Ôn cả bài cũ:** khoảng một nửa số câu của bài vừa học, nửa còn lại lấy ngẫu nhiên từ các bài trước (chữ cái: bài 1 → bài hiện tại; cấu trúc câu: bài 1 → bài hiện tại; từ vựng: từ đã học ở các chủ đề khác). Mỗi lần làm lại là một bộ câu mới.
+- **Độ khó tăng dần:** mỗi câu có nhãn *Mức 1 → Mức 4* và xếp từ dễ đến khó, ví dụ:
+  - Chữ cái: nhìn chữ chọn âm → nghe chọn chữ / chữ hoa – chữ thường → đọc từ → tự viết tay hoặc tự gõ từ.
+  - Từ vựng: nhìn từ chọn nghĩa → nghĩa chọn từ / nghe chọn từ → chỉ nghe chọn nghĩa → tự gõ từ.
+  - Cấu trúc câu: hiểu câu → chọn dạng đúng / chọn câu đúng nghĩa → xếp câu → tự gõ từ còn thiếu.
+- Bài càng về sau càng nhiều câu và nhiều câu khó (chữ cái 10 → 14 câu, cấu trúc câu 12 → 16 câu).
+- Là bài kiểm tra nên câu sai không hỏi lại. Đạt từ 70% (+15 XP lần đầu). Cuối bài cho biết đúng bao nhiêu ở từng mức và **bài nào nên ôn lại** (bấm vào để mở bài đó).
+- Điểm cao nhất hiện ở trang bài học và được đồng bộ qua Google Drive.
 
 ### Khác
 - Trang chủ có **lộ trình gợi ý** cho người mới, mục tiêu XP mỗi ngày và chuỗi ngày học 🔥.
@@ -112,6 +125,7 @@ js/lib/recognizer.js  nhận dạng & chấm chữ viết tay
 js/lib/writingpad.js  bảng viết canvas + hoạt ảnh nét chữ
 js/lib/keyboard.js    bàn phím Kirin ảo, gõ phiên âm
 js/lib/quiz.js        bộ máy bài tập
+js/lib/test.js        bài kiểm tra tổng hợp (chọn câu bài này + bài trước, xếp từ dễ đến khó)
 js/lib/speech.js      nhận dạng giọng nói, ghi âm, chấm phát âm
 js/lib/sync.js        đồng bộ tiến độ qua Google Drive (dùng chung OAuth client với Coin Manager)
 js/data/pronounce.js  cặp âm dễ nhầm

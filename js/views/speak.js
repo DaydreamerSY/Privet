@@ -16,6 +16,12 @@
     'Tuyệt vời! Máy nghe rất rõ. 🎉',
   ];
   let srBroken = false; // dịch vụ nhận dạng không chạy trong trình duyệt này → chỉ ghi âm
+  let silentFails = 0;  // số lần liên tiếp micro thu được tiếng nói mà máy không nhận ra chữ nào
+  /** Vì sao không có máy chấm (để giải thích cho người dùng) */
+  const noScoreReason = () => (SP.blockedBrowser
+    ? SP.blockedBrowser + ' chưa hỗ trợ máy chấm phát âm (nhận dạng giọng nói). Muốn được chấm điểm, hãy mở app bằng Chrome hoặc Edge.'
+    : !SP.srSupported ? 'Trình duyệt này không hỗ trợ máy chấm phát âm. Muốn được chấm điểm, hãy mở app bằng Chrome hoặc Edge.'
+      : 'Máy chấm không chạy được trong trình duyệt này. Muốn được chấm điểm, hãy mở app bằng Chrome hoặc Edge.');
 
   function saveStars(ru, stars) {
     const st = RU.state.speak || (RU.state.speak = {});
@@ -59,6 +65,7 @@
     let items = startItems;
     let best = items.map(() => null);
     let pos = 0; let ctl = null; let listening = false; let audio = null;
+    let reasonShown = false; // đã giải thích vì sao trình duyệt này không chấm được chưa
     const urls = [];
     let micBtn = null; let nextBtn = null;
 
@@ -87,7 +94,8 @@
       } else go();
     }
 
-    function showResult(it, alts, err, audioUrl, status, result) {
+    function showResult(it, alts, err, audioUrl, status, result, info) {
+      info = info || {};
       result.innerHTML = '';
       const btns = h('div', { class: 'speak-actions' });
       if (audioUrl) {
@@ -96,6 +104,7 @@
           h('button', { type: 'button', class: 'btn ghost', onclick: () => compare(it, audioUrl) }, RU.icon('refresh', 16), ' So sánh: mẫu → bạn'));
       }
       if (alts && alts.length) {
+        silentFails = 0;
         const r = SP.score(it.ru, alts);
         let stars = SP.starsOf(r.score);
         let msg = MSG[stars];
@@ -121,11 +130,33 @@
         if (SP.fatal(err)) srBroken = true;
         status.textContent = srBroken ? 'Nhấn micro để ghi âm giọng bạn' : 'Nhấn micro để thử lại';
         RU.append(result, [h('div', { class: 'callout warn' }, SP.errorText(err), srBroken && SP.fatal(err) ? ' Từ giờ app sẽ chỉ ghi âm để bạn tự nghe lại và so sánh với giọng mẫu.' : ''), btns]);
+      } else if (info.recognized && !srBroken) {
+        // Không có kết quả nhận dạng: phân biệt «không nói gì» với «nói rồi mà máy không nhận ra»
+        const measured = typeof info.peak === 'number';
+        const spoke = measured && info.peak >= SP.SPOKE;
+        let msg;
+        if (spoke && !info.heardAny) {
+          silentFails++;
+          if (silentFails >= 2) {
+            srBroken = true;
+            msg = 'Micro thu được giọng bạn, nhưng trình duyệt này không trả về kết quả nhận dạng nào — có lẽ không hỗ trợ máy chấm phát âm. '
+              + 'Từ giờ app chỉ ghi âm để bạn nghe lại và so sánh với giọng mẫu. Muốn được chấm điểm, hãy mở app bằng Chrome hoặc Edge.';
+          } else {
+            msg = 'Micro đã thu được giọng bạn, nhưng máy chưa nhận ra từ nào. Hãy đọc lại rõ hơn; nếu vẫn vậy, có thể trình duyệt này không hỗ trợ máy chấm (Chrome và Edge chạy tốt).';
+          }
+        } else if (measured && info.peak < SP.QUIET) {
+          msg = 'Micro gần như không thu được âm thanh — hãy kiểm tra micro đã bật và đúng thiết bị chưa, rồi nói to, gần micro hơn.';
+        } else {
+          msg = 'Máy không nghe thấy gì — hãy nói to và gần micro hơn nhé.';
+        }
+        status.textContent = srBroken ? 'Nhấn micro để ghi âm giọng bạn' : 'Nhấn micro để nói lại';
+        RU.append(result, [h('div', { class: 'callout' + (srBroken ? ' warn' : '') }, msg), btns]);
       } else {
-        status.textContent = 'Nhấn micro để nói lại';
-        RU.append(result, [h('div', { class: 'callout' }, SP.srSupported && !srBroken
-          ? 'Máy không nghe thấy gì — hãy nói to và gần micro hơn nhé.'
-          : 'Đã ghi âm! Nghe lại giọng bạn và so sánh với giọng mẫu xem đã giống chưa.'), btns]);
+        // Chỉ ghi âm (trình duyệt không chấm được): nhắc lý do một lần mỗi phiên
+        status.textContent = 'Nhấn micro để ghi âm lại';
+        RU.append(result, [h('div', { class: 'callout' }, 'Đã ghi âm! Nghe lại giọng bạn và so sánh với giọng mẫu xem đã giống chưa.',
+          !reasonShown ? h('div', { class: 'small muted' }, noScoreReason()) : null), btns]);
+        reasonShown = true;
       }
     }
 
@@ -145,12 +176,12 @@
         onInterim: (t) => { if (pos === myPos) status.textContent = '… ' + t; },
         onFinal: (a) => { alts = a; },
         onError: (code) => { if (code !== 'aborted') err = code; },
-        onEnd: ({ audioUrl }) => {
+        onEnd: ({ audioUrl, peak, heardAny, recognized }) => {
           if (audioUrl) urls.push(audioUrl);
           if (pos !== myPos) return;
           listening = false;
           micBtn.classList.remove('on');
-          showResult(it, alts, err, audioUrl, status, result);
+          showResult(it, alts, err, audioUrl, status, result, { peak, heardAny, recognized });
         },
       });
     }
@@ -168,6 +199,9 @@
       const status = h('div', { class: 'mic-status', 'aria-live': 'polite' },
         SP.srSupported && !srBroken ? 'Nhấn micro rồi đọc to (hoặc phím cách)' : 'Nhấn micro để ghi âm giọng bạn, rồi nghe lại và so sánh');
       const result = h('div', { class: 'speak-result' });
+      // Trình duyệt không chấm được (Opera, Vivaldi…): nói rõ ngay từ đầu, chỉ ghi âm để so sánh
+      const note = !(SP.srSupported && !srBroken) ? h('div', { class: 'small muted mic-note' }, noScoreReason()) : null;
+      if (note) reasonShown = true;
       micBtn = h('button', { type: 'button', class: 'mic-btn', 'aria-label': 'Nói', title: 'Nói (phím cách)' }, RU.icon('mic', 40));
       micBtn.addEventListener('click', () => toggle(it, status, result));
       const isSentence = SP.words(it.ru).length > 1;
@@ -181,7 +215,7 @@
         h('div', { class: 'speak-listen' },
           h('button', { type: 'button', class: 'btn soft', onclick: () => { stopAudio(); RU.tts.speak(it.ru); } }, RU.icon('volume', 18), ' Nghe mẫu'),
           h('button', { type: 'button', class: 'btn soft', onclick: () => { stopAudio(); RU.tts.speak(it.ru, { rate: 0.55 }); } }, '🐢 Nghe chậm')),
-        h('div', { class: 'mic-wrap' }, micBtn), status, result));
+        h('div', { class: 'mic-wrap' }, micBtn), status, note, result));
       body.classList.remove('enter'); void body.offsetWidth; body.classList.add('enter');
       nextBtn = h('button', { type: 'button', class: 'btn primary', onclick: () => { pos++; if (pos >= items.length) finish(); else render(); } },
         pos === items.length - 1 ? 'Xem kết quả' : 'Tiếp', ' ', RU.icon('right', 18));
@@ -242,7 +276,9 @@
     const srOk = SP.srSupported && !srBroken;
     main.append(h('div', { class: 'card support' },
       h('div', null, yes(srOk), ' Máy chấm phát âm (nhận dạng giọng nói) ',
-        h('small', { class: 'muted' }, SP.srSupported ? (srBroken ? '— không kết nối được dịch vụ trong trình duyệt này' : '— cần mạng; chạy tốt trên Chrome và Edge') : '— trình duyệt này không hỗ trợ, hãy dùng Chrome hoặc Edge')),
+        h('small', { class: 'muted' }, SP.blockedBrowser ? '— ' + SP.blockedBrowser + ' chưa hỗ trợ; hãy dùng Chrome hoặc Edge để được chấm điểm'
+          : SP.srSupported ? (srBroken ? '— không chạy được trong trình duyệt này; hãy dùng Chrome hoặc Edge' : '— cần mạng; chạy tốt trên Chrome và Edge')
+            : '— trình duyệt này không hỗ trợ, hãy dùng Chrome hoặc Edge')),
       h('div', null, yes(SP.recSupported), ' Ghi âm giọng bạn để nghe lại'),
       h('div', null, yes(RU.tts.voices.length > 0), ' Giọng đọc mẫu tiếng Nga'),
       h('p', { class: 'muted small' }, 'Lần đầu bấm 🎤, trình duyệt sẽ hỏi quyền dùng micro — hãy chọn «Cho phép». Máy chấm cho biết máy có nghe ra đúng từ hay không; để sửa từng âm, hãy nghe lại giọng mình và so sánh với giọng mẫu.')));

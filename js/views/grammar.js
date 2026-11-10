@@ -33,60 +33,108 @@
     return 'Ngoại lệ! ' + (w.note || '«' + U.stripStress(w.ru) + '» là ' + gName[w.g] + '.');
   }
 
+  /* Từng dạng câu hỏi (dùng cho luyện tập và bài kiểm tra tổng hợp) */
+  const gapExplain = (d, full) => () => h('div', null, h('div', null, ui.ru(full, { speak: true }), ' ', ui.tr(full)), d.why ? h('div', { class: 'muted' }, '💡 ' + d.why) : null);
+  /** Điền vào chỗ trống: chọn trong các phương án */
+  function qGap(d) {
+    const correct = d.o[0];
+    const full = d.q.replace('___', correct);
+    return {
+      type: 'mc', label: 'Chọn từ thích hợp điền vào chỗ trống',
+      prompt: gapPrompt(d.q, d.vi),
+      options: d.o.map((o, i) => ({ label: h('span', { lang: 'ru' }, RU.disp(o)), correct: i === 0, ru: true })),
+      sayAfter: full, answer: () => ui.ru(correct), explain: gapExplain(d, full),
+    };
+  }
+  /** Điền vào chỗ trống: tự gõ từ còn thiếu (khó nhất) */
+  function qGapType(d) {
+    const correct = d.o[0];
+    const full = d.q.replace('___', correct);
+    return {
+      type: 'type', label: 'Gõ từ còn thiếu bằng tiếng Nga', prompt: gapPrompt(d.q, d.vi), answers: [correct],
+      placeholder: 'Gõ từ còn thiếu…', sayAfter: full, answer: () => ui.ru(correct), explain: gapExplain(d, full),
+    };
+  }
+  /** Xếp các từ thành câu */
+  function qOrder(d) {
+    return {
+      type: 'order', vi: d.vi, tokens: RU.tokenize(d.ru),
+      extra: (d.x || []).map((x) => RU.tokenize(x)[0]).filter(Boolean),
+      sayAfter: d.ru, answer: () => ui.ru(d.ru),
+      explain: () => h('div', null, ui.ru(d.ru, { speak: true }), ' ', ui.tr(d.ru)),
+    };
+  }
+  /** Nghĩa tiếng Việt → chọn câu tiếng Nga */
+  function qPickRu(e, pool) {
+    const others = U.shuffle(pool.filter((x) => x !== e && x.ru !== e.ru)).slice(0, 3);
+    return {
+      type: 'mc', label: 'Chọn câu tiếng Nga đúng nghĩa', prompt: h('span', null, e.vi),
+      options: [{ label: h('span', { lang: 'ru' }, RU.disp(e.ru)), correct: true, ru: true }].concat(others.map((o) => ({ label: h('span', { lang: 'ru' }, RU.disp(o.ru)), ru: true }))),
+      sayAfter: e.ru, answer: () => ui.ru(e.ru),
+    };
+  }
+  /** Câu tiếng Nga (có giọng đọc) → chọn nghĩa */
+  function qMeaning(e, pool) {
+    const others = U.shuffle(pool.filter((x) => x !== e && x.vi !== e.vi)).slice(0, 3);
+    return {
+      type: 'mc', label: 'Câu này nghĩa là gì?', prompt: h('div', null, ui.ru(e.ru, { cls: 'lg' }), ui.tr(e.ru)), speak: e.ru,
+      options: [{ label: e.vi, correct: true }].concat(others.map((o) => ({ label: o.vi }))),
+      answer: e.vi,
+    };
+  }
+  const genderNouns = () => RU.VOCAB.all.filter((w) => ['m', 'f', 'n'].includes(w.g) && !/\s/.test(w.ru));
+  function qGender(w) {
+    return {
+      type: 'mc', label: 'Danh từ này thuộc giống nào?', keepOrder: true,
+      prompt: h('div', { class: 'word-prompt' }, ui.ru(w.ru, { cls: 'xl' }), h('div', { class: 'muted' }, w.vi)), speak: w.ru, autoplay: false,
+      options: [['m', 'Giống đực (он)'], ['f', 'Giống cái (она́)'], ['n', 'Giống trung (оно́)']].map(([g, label]) => ({ label, correct: g === w.g })),
+      explain: genderRule(w),
+    };
+  }
+
   function lessonQuestions(L) {
     const qs = [];
     L.drills.forEach((d) => {
-      if (d.t === 'c') {
-        const correct = d.o[0];
-        const full = d.q.replace('___', correct);
-        qs.push({
-          type: 'mc', label: 'Chọn từ thích hợp điền vào chỗ trống',
-          prompt: gapPrompt(d.q, d.vi),
-          options: d.o.map((o, i) => ({ label: h('span', { lang: 'ru' }, RU.disp(o)), correct: i === 0, ru: true })),
-          sayAfter: full,
-          answer: () => ui.ru(correct),
-          explain: () => h('div', null, h('div', null, ui.ru(full, { speak: true }), ' ', ui.tr(full)), d.why ? h('div', { class: 'muted' }, '💡 ' + d.why) : null),
-        });
-      } else if (d.t === 'o') {
-        qs.push({
-          type: 'order', vi: d.vi, tokens: RU.tokenize(d.ru),
-          extra: (d.x || []).map((x) => RU.tokenize(x)[0]).filter(Boolean),
-          sayAfter: d.ru, answer: () => ui.ru(d.ru),
-          explain: () => h('div', null, ui.ru(d.ru, { speak: true }), ' ', ui.tr(d.ru)),
-        });
-      }
+      if (d.t === 'c') qs.push(qGap(d));
+      else if (d.t === 'o') qs.push(qOrder(d));
     });
     const ex = L.ex;
     if (ex.length >= 4) {
-      U.sample(ex, 2).forEach((e) => {
-        const others = U.shuffle(ex.filter((x) => x !== e)).slice(0, 3);
-        qs.push({
-          type: 'mc', label: 'Chọn câu tiếng Nga đúng nghĩa', prompt: h('span', null, e.vi),
-          options: [{ label: h('span', { lang: 'ru' }, RU.disp(e.ru)), correct: true, ru: true }].concat(others.map((o) => ({ label: h('span', { lang: 'ru' }, RU.disp(o.ru)), ru: true }))),
-          sayAfter: e.ru, answer: () => ui.ru(e.ru),
-        });
-      });
-      U.sample(ex, 2).forEach((e) => {
-        const others = U.shuffle(ex.filter((x) => x !== e)).slice(0, 3);
-        qs.push({
-          type: 'mc', label: 'Câu này nghĩa là gì?', prompt: h('div', null, ui.ru(e.ru, { cls: 'lg' }), ui.tr(e.ru)), speak: e.ru,
-          options: [{ label: e.vi, correct: true }].concat(others.map((o) => ({ label: o.vi }))),
-          answer: e.vi,
-        });
-      });
+      U.sample(ex, 2).forEach((e) => qs.push(qPickRu(e, ex)));
+      U.sample(ex, 2).forEach((e) => qs.push(qMeaning(e, ex)));
     }
-    if (L.auto === 'gender') {
-      const nouns = RU.VOCAB.all.filter((w) => ['m', 'f', 'n'].includes(w.g) && !/\s/.test(w.ru));
-      U.sample(nouns, 4).forEach((w) => {
-        qs.push({
-          type: 'mc', label: 'Danh từ này thuộc giống nào?', keepOrder: true,
-          prompt: h('div', { class: 'word-prompt' }, ui.ru(w.ru, { cls: 'xl' }), h('div', { class: 'muted' }, w.vi)), speak: w.ru, autoplay: false,
-          options: [['m', 'Giống đực (он)'], ['f', 'Giống cái (она́)'], ['n', 'Giống trung (оно́)']].map(([g, label]) => ({ label, correct: g === w.g })),
-          explain: genderRule(w),
-        });
-      });
-    }
+    if (L.auto === 'gender') U.sample(genderNouns(), 4).forEach((w) => qs.push(qGender(w)));
     return U.shuffle(qs);
+  }
+
+  /* ======================= Kiểm tra tổng hợp ======================= */
+  /** Câu hỏi của bài L và mọi bài trước: hiểu câu (1) → chọn dạng đúng (2) → xếp câu (3) → tự gõ từ (4) */
+  function grammarTestCands(L) {
+    const upto = G.slice(0, G.indexOf(L) + 1);
+    const allEx = [];
+    upto.forEach((x) => allEx.push(...x.ex));
+    const cands = (x) => {
+      const from = { label: 'Bài ' + x.n + '. ' + x.title, href: '#/grammar/lesson/' + x.id };
+      const pool = x.ex.length >= 4 ? x.ex : allEx;
+      const out = [];
+      x.ex.forEach((e, i) => {
+        const key = 'E' + x.id + i;
+        out.push({ d: 1, key, from, make: () => qMeaning(e, pool) });
+        out.push({ d: 2, key, from, make: () => qPickRu(e, pool) });
+      });
+      x.drills.forEach((d, i) => {
+        const key = 'D' + x.id + i;
+        if (d.t === 'c') {
+          out.push({ d: 2, key, from, make: () => qGap(d) });
+          out.push({ d: 4, key, from, make: () => qGapType(d) });
+        } else if (d.t === 'o') out.push({ d: 3, key, from, make: () => qOrder(d) });
+      });
+      if (x.auto === 'gender') U.sample(genderNouns(), 3).forEach((w) => out.push({ d: 2, key: 'N' + w.id, from, make: () => qGender(w) }));
+      return out;
+    };
+    const prev = [];
+    upto.slice(0, -1).forEach((x) => prev.push(...cands(x)));
+    return { cur: cands(L), prev };
   }
 
   /* ======================= Danh sách bài ======================= */
@@ -153,6 +201,13 @@
       h('span', { class: 'banner-ico' }, '✏️'),
       h('div', null, h('b', null, 'Luyện tập bài ' + L.n), h('small', null, 'Khoảng ' + n + ' câu · cần đạt 70% để hoàn thành' + (s.best ? ' · tốt nhất: ' + s.best + '%' : ''))),
       h('a', { class: 'btn primary', href: '#/grammar/practice/' + L.id }, 'Bắt đầu')));
+    const tr = RU.Test.result('g:' + L.id);
+    main.append(h('div', { class: 'card banner test-banner' + (tr && tr.pass ? ' ok' : '') },
+      h('span', { class: 'banner-ico' }, '📝'),
+      h('div', null, h('b', null, 'Kiểm tra tổng hợp' + (L.n > 1 ? ' bài 1–' + L.n : '')),
+        h('small', null, 'Câu hỏi ngẫu nhiên từ bài này' + (L.n > 1 ? ' và các bài trước' : '') + ', từ dễ đến khó · cần ' + RU.Test.PASS + '%'
+          + (tr && tr.n ? ' · tốt nhất: ' + tr.best + '%' + (tr.pass ? ' ✓' : '') : ''))),
+      h('a', { class: 'btn ' + (s.done ? 'primary' : 'soft'), href: '#/grammar/test/' + L.id }, 'Làm bài')));
     main.append(h('div', { class: 'flow-nav' },
       prev ? h('a', { class: 'btn ghost', href: '#/grammar/lesson/' + prev.id }, RU.icon('left', 18), ' Bài ' + prev.n) : h('span'),
       next ? h('a', { class: 'btn ghost', href: '#/grammar/lesson/' + next.id }, 'Bài ' + next.n + ' ', RU.icon('right', 18)) : h('span')));
@@ -172,10 +227,29 @@
         if (r.pct >= 70 && !s.done) { s.done = true; RU.addXp(20); }
         RU.store.save();
         const next = G[G.indexOf(L) + 1];
-        if (r.pct >= 70 && next) return h('a', { class: 'btn soft', href: '#/grammar/lesson/' + next.id }, 'Bài tiếp theo: ' + next.title);
-        if (r.pct < 70) return h('p', null, 'Cần đạt 70% để hoàn thành bài. Hãy đọc lại phần giải thích rồi thử lại nhé!');
-        return null;
+        if (r.pct >= 70) {
+          return h('div', { class: 'row gap center' },
+            h('a', { class: 'btn soft', href: '#/grammar/test/' + L.id }, '📝 Kiểm tra tổng hợp' + (L.n > 1 ? ' (bài 1–' + L.n + ')' : '')),
+            next ? h('a', { class: 'btn ghost', href: '#/grammar/lesson/' + next.id }, 'Bài tiếp theo: ' + next.title) : null);
+        }
+        return h('p', null, 'Cần đạt 70% để hoàn thành bài. Hãy đọc lại phần giải thích rồi thử lại nhé!');
       },
+    });
+  });
+
+  RU.route('grammar/test/:id', (ctx) => {
+    const L = G.byId[ctx.params.id];
+    if (!L) return RU.go('grammar');
+    const i = G.indexOf(L);
+    const next = G[i + 1];
+    RU.Test.run(ctx, {
+      key: 'g:' + L.id,
+      title: 'Kiểm tra · ' + (L.n > 1 ? 'Bài 1–' + L.n : 'Bài 1'),
+      count: Math.min(16, 12 + Math.floor(i / 4)),
+      level: i / Math.max(1, G.length - 1),
+      cands: () => grammarTestCands(L),
+      back: { href: '#/grammar/lesson/' + L.id, label: 'Về bài học' },
+      next: next ? { href: '#/grammar/lesson/' + next.id, label: 'Bài tiếp theo: ' + next.title } : { href: '#/grammar', label: 'Về danh sách bài' },
     });
   });
 

@@ -210,6 +210,7 @@
   const fresh = () => ({
     v: 1, settings: Object.assign({}, DEFAULTS),
     letters: {}, alpha: {}, words: {}, grammar: {}, xp: {}, speak: {},
+    tests: {}, // bài kiểm tra tổng hợp: { 'a:1' | 'v:greet' | 'g:eto': { best, n, pass } }
     streak: { last: '', count: 0 }, total: 0, created: Date.now(),
     xpBy: {},  // XP theo từng máy { mãMáy: { ngày: XP } } — để gộp đúng khi đồng bộ nhiều máy
     setAt: {}, // thời điểm đổi từng cài đặt — khi đồng bộ, lần đổi sau cùng thắng
@@ -241,7 +242,7 @@
       if (!raw) { try { raw = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { raw = null; } }
       state = Object.assign(fresh(), raw || {});
       state.settings = Object.assign({}, DEFAULTS, (raw && raw.settings) || {});
-      ['letters', 'alpha', 'words', 'grammar', 'xp', 'speak', 'xpBy', 'setAt'].forEach((k) => { if (!state[k] || typeof state[k] !== 'object') state[k] = {}; });
+      ['letters', 'alpha', 'words', 'grammar', 'xp', 'speak', 'tests', 'xpBy', 'setAt'].forEach((k) => { if (!state[k] || typeof state[k] !== 'object') state[k] = {}; });
       if (!state.streak || typeof state.streak !== 'object') state.streak = { last: '', count: 0 };
       if (typeof state.epoch !== 'number') state.epoch = 0;
       // XP có từ trước khi có đồng bộ (chưa ghi theo máy) → tính là của máy này

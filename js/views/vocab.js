@@ -181,6 +181,11 @@
     main.append(h('div', { class: 'grid actions' },
       h('a', { class: 'card action primary', href: '#/vocab/learn/' + t.id }, h('span', { class: 'action-ico' }, '🌱'), h('b', null, fresh ? 'Học từ mới' : 'Học lại'), h('small', null, fresh ? fresh + ' từ chưa học' : 'Đã học hết — ôn lại một lượt')),
       h('a', { class: 'card action', href: '#/vocab/practice/' + t.id }, h('span', { class: 'action-ico' }, '🎯'), h('b', null, 'Luyện tập'), h('small', null, 'Trắc nghiệm, nghe, gõ chữ')),
+      (() => {
+        const tr = RU.Test.result('v:' + t.id);
+        return h('a', { class: 'card action' + (tr && tr.pass ? ' done' : ''), href: '#/vocab/test/' + t.id }, h('span', { class: 'action-ico' }, '📝'), h('b', null, 'Kiểm tra'),
+          h('small', null, tr && tr.n ? 'Tốt nhất ' + tr.best + '%' + (tr.pass ? ' ✓' : '') + ' · gồm cả từ đã học trước' : 'Chủ đề này + từ đã học trước, khó dần'));
+      })(),
       h('a', { class: 'card action', href: '#/vocab/match/' + t.id }, h('span', { class: 'action-ico' }, '🧩'), h('b', null, 'Ghép cặp'), h('small', null, 'Trò chơi nối từ nhanh')),
       h('a', { class: 'card action', href: '#/vocab/cards/' + t.id }, h('span', { class: 'action-ico' }, '🃏'), h('b', null, 'Thẻ ghi nhớ'), h('small', null, 'Lật thẻ tự kiểm tra')),
       h('a', { class: 'card action', href: '#/speak/vocab/' + t.id + '?from=topic' }, h('span', { class: 'action-ico' }, '🎤'), h('b', null, 'Luyện phát âm'), h('small', null, 'Đọc to, máy nghe & chấm'))));
@@ -218,7 +223,8 @@
           const more = t.list.filter((w) => !SRS.learned(w.id)).length;
           return h('div', null,
             h('p', null, review ? 'Đã ôn lại ' + words.length + ' từ.' : 'Đã thêm ' + words.length + ' từ vào lịch ôn tập. Ngày mai hãy quay lại ôn nhé!'),
-            more ? h('a', { class: 'btn soft', href: '#/vocab/learn/' + t.id, onclick: (e) => { e.preventDefault(); RU.refresh(); } }, 'Học tiếp ' + Math.min(more, n) + ' từ mới') : null);
+            more ? h('a', { class: 'btn soft', href: '#/vocab/learn/' + t.id, onclick: (e) => { e.preventDefault(); RU.refresh(); } }, 'Học tiếp ' + Math.min(more, n) + ' từ mới')
+              : h('a', { class: 'btn soft', href: '#/vocab/test/' + t.id }, '📝 Làm bài kiểm tra chủ đề'));
         },
       });
     };
@@ -257,6 +263,42 @@
     const base = learned.length >= 4 ? learned : t.list;
     const gen = () => U.shuffle(practiceSet(base, 12));
     RU.mountQuiz(ctx, gen(), { title: 'Luyện tập · ' + t.title, regenerate: gen, onExit: () => RU.go('vocab/topic/' + t.id) });
+  });
+
+  /* ======================= Kiểm tra tổng hợp ======================= */
+  /** Từ của chủ đề này (đã học) + từ đã học ở các chủ đề khác; mỗi từ có 4 mức khó */
+  function vocabTestCands(t) {
+    const learned = (w) => SRS.learned(w.id);
+    const grade = (w) => (ok) => { if (SRS.learned(w.id)) SRS.grade(w.id, ok); }; // chỉ tính vào lịch ôn những từ đã học
+    const fromTopic = (tp) => ({ label: tp.icon + ' ' + tp.title, href: '#/vocab/topic/' + tp.id });
+    const cands = (w, from) => [
+      { d: 1, key: w.id, from, make: () => Q.ruVi(w, grade(w)) },     // nhìn chữ Nga (có giọng đọc) → chọn nghĩa
+      { d: 2, key: w.id, from, make: () => Q.viRu(w, grade(w)) },     // nghĩa → chọn từ tiếng Nga
+      { d: 2, key: w.id, from, make: () => Q.listenRu(w, grade(w)) }, // nghe → chọn từ tiếng Nga
+      { d: 3, key: w.id, from, make: () => Q.listen(w, grade(w)) },   // chỉ nghe → chọn nghĩa
+      { d: 4, key: w.id, from, make: () => Q.type(w, grade(w)) },     // nghĩa → tự gõ từ tiếng Nga
+    ];
+    const known = t.list.filter(learned);
+    const cur = [];
+    (known.length >= 4 ? known : t.list).forEach((w) => cur.push(...cands(w, fromTopic(t))));
+    const prev = [];
+    V.topics.forEach((tp) => { if (tp.id !== t.id) tp.list.filter(learned).forEach((w) => prev.push(...cands(w, fromTopic(tp)))); });
+    return { cur, prev };
+  }
+  RU.route('vocab/test/:id', (ctx) => {
+    const t = V.topic(ctx.params.id);
+    if (!t) return RU.go('vocab');
+    const idx = V.topics.indexOf(t);
+    const next = V.topics[idx + 1];
+    RU.Test.run(ctx, {
+      key: 'v:' + t.id,
+      title: 'Kiểm tra · ' + t.title,
+      count: 12,
+      level: idx / Math.max(1, V.topics.length - 1),
+      cands: () => vocabTestCands(t),
+      back: { href: '#/vocab/topic/' + t.id, label: 'Về chủ đề' },
+      next: next ? { href: '#/vocab/topic/' + next.id, label: 'Chủ đề tiếp: ' + next.title } : { href: '#/vocab', label: 'Về danh sách chủ đề' },
+    });
   });
 
   /* ======================= Ôn tập đến hạn ======================= */

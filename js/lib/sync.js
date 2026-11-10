@@ -142,6 +142,7 @@
     n += mergeMax(L.letters, R.letters);
     n += mergeMax(L.alpha, R.alpha);
     n += mergeMax(L.grammar, R.grammar);
+    n += mergeMax(L.tests, R.tests);     // bài kiểm tra: điểm cao nhất, số lần làm, đã đạt
     n += mergeWords(L.words, R.words);
     n += mergeSpeak(L.speak, R.speak);
     n += mergeXp(L, R);

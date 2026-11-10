@@ -7,12 +7,12 @@
    → chỉ đụng tới cache có tiền tố của app này, và chỉ xử lý yêu cầu trong thư mục của app.
    ===================================================================== */
 const PREFIX = 'privet-ru-';
-const CACHE = PREFIX + 'v1';
+const CACHE = PREFIX + 'v2';
 const ASSETS = [
   './', './index.html', './manifest.webmanifest', './css/style.css',
   './js/core.js', './js/lib/path.js',
   './js/data/glyphs.js', './js/data/alphabet.js', './js/data/vocab.js', './js/data/grammar.js', './js/data/pronounce.js',
-  './js/lib/recognizer.js', './js/lib/writingpad.js', './js/lib/keyboard.js', './js/lib/quiz.js', './js/lib/speech.js', './js/lib/sync.js',
+  './js/lib/recognizer.js', './js/lib/writingpad.js', './js/lib/keyboard.js', './js/lib/quiz.js', './js/lib/test.js', './js/lib/speech.js', './js/lib/sync.js',
   './js/views/home.js', './js/views/alphabet.js', './js/views/vocab.js', './js/views/grammar.js', './js/views/speak.js',
   './js/views/settings.js', './js/views/debug.js', './js/app.js',
   './oauth.html', './js/oauth.js',

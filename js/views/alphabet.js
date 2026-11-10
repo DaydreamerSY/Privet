@@ -121,16 +121,20 @@
       h('div', { class: 'step-info' }, h('b', null, title), h('small', null, desc)),
       score != null ? h('span', { class: 'chip' }, score) : null,
       h('span', { class: 'step-go' }, RU.icon('right', 18)));
+    const test = RU.Test.result('a:' + l.id);
     main.append(h('div', { class: 'steps' },
       step(1, 'Làm quen', 'Xem từng chữ: âm đọc, ví dụ, cách viết', '#/alphabet/lesson/' + l.id + '/intro', s.intro),
       step(2, 'Trắc nghiệm', 'Nhận mặt chữ, nghe và chọn (cần ≥ 70%)', '#/alphabet/lesson/' + l.id + '/quiz', s.quiz >= 70, s.quiz ? s.quiz + '%' : null),
       step(3, 'Luyện viết', 'Tô theo mẫu và tự viết trên bảng', '#/alphabet/lesson/' + l.id + '/write', s.write),
       step(4, 'Tập đọc', 'Đọc các từ chỉ dùng chữ đã học', '#/alphabet/lesson/' + l.id + '/read', s.read >= 50, s.read ? s.read + '%' : null),
+      step(5, 'Kiểm tra tổng hợp', (l.id > 1 ? 'Ôn cả bài 1–' + l.id : 'Ôn toàn bài') + ': câu hỏi ngẫu nhiên, từ dễ đến khó (cần ≥ ' + RU.Test.PASS + '%)',
+        '#/alphabet/lesson/' + l.id + '/test', !!(test && test.pass), test && test.n ? test.best + '%' : null),
       step('🎤', 'Luyện phát âm (thêm)', 'Đọc to các từ của bài, máy nghe và chấm', '#/speak/alpha/' + l.id + '?from=lesson', false)));
 
     const nextL = A.lessons.find((x) => x.id === l.id + 1);
     if (lessonDone(l.id)) {
       main.append(h('div', { class: 'card banner ok' }, h('b', null, '🎉 Bạn đã hoàn thành bài này!'),
+        !(test && test.pass) ? h('a', { class: 'btn soft', href: '#/alphabet/lesson/' + l.id + '/test' }, '📝 Làm bài kiểm tra') : null,
         nextL ? h('a', { class: 'btn primary', href: '#/alphabet/lesson/' + nextL.id }, 'Sang bài ' + nextL.id) : h('a', { class: 'btn primary', href: '#/vocab' }, 'Học từ vựng')));
     }
   });
@@ -200,34 +204,40 @@
     if (L.trapOpt && !others.includes(L.trapOpt)) others[0] = L.trapOpt;
     return [{ label: L.snd, correct: true }].concat(others.map((s) => ({ label: s })));
   }
+  /* Từng dạng câu hỏi về một chữ (dùng cho trắc nghiệm và bài kiểm tra tổng hợp) */
+  const letterResult = (L) => (ok) => { const s = stat(L.u); if (ok) s.qr++; else s.qw++; RU.store.save(); };
+  const CASE_DIFF = ['А', 'Б', 'Д', 'Е', 'Ё', 'Р', 'У', 'Ф']; // chữ thường trông khác hẳn chữ hoa
+  function qLetterSound(L, pool) {
+    return {
+      type: 'mc', label: 'Chữ này đọc là gì?', prompt: h('span', { class: 'ru', lang: 'ru' }, Math.random() < 0.5 ? L.u : L.l), huge: true,
+      options: sndOptions(L, pool), sayAfter: L.name, onResult: letterResult(L),
+      explain: h('span', null, h('b', { lang: 'ru' }, L.u + ' ' + L.l), ' — ', L.hint),
+    };
+  }
+  function qListenLetter(L, pool) {
+    const others = U.shuffle(pool.filter((x) => x.u !== L.u)).slice(0, 3);
+    return {
+      type: 'mc', label: 'Nghe và chọn chữ cái đúng', speak: L.name, audioOnly: true, cols: 4,
+      options: [L].concat(others).map((x) => ({ label: h('span', { lang: 'ru' }, x.u + x.l), correct: x === L, big: true })),
+      answer: L.u + ' ' + L.l, onResult: letterResult(L),
+    };
+  }
+  function qCase(L, pool) {
+    const wrong = U.shuffle(pool.filter((x) => x.u !== L.u)).slice(0, 3);
+    return {
+      type: 'mc', label: 'Chữ thường của chữ hoa này là?', prompt: h('span', { class: 'ru', lang: 'ru' }, L.u), huge: true, cols: 4,
+      options: [L].concat(wrong).map((x) => ({ label: h('span', { lang: 'ru' }, x.l), correct: x === L, big: true })),
+      answer: L.l, onResult: letterResult(L),
+    };
+  }
   function letterQuestions(idxs, poolIdx, opts) {
     opts = opts || {};
     const pool = poolIdx.map((i) => LET[i]);
     const qs = [];
     idxs.forEach((i) => {
       const L = LET[i];
-      const onResult = (ok) => { const s = stat(L.u); if (ok) s.qr++; else s.qw++; RU.store.save(); };
-      const isUpper = Math.random() < 0.5;
-      qs.push({
-        type: 'mc', label: 'Chữ này đọc là gì?', prompt: h('span', { class: 'ru', lang: 'ru' }, isUpper ? L.u : L.l), huge: true,
-        options: sndOptions(L, pool), sayAfter: L.name, onResult,
-        explain: h('span', null, h('b', { lang: 'ru' }, L.u + ' ' + L.l), ' — ', L.hint),
-      });
-      const others = U.shuffle(pool.filter((x) => x.u !== L.u)).slice(0, 3);
-      qs.push({
-        type: 'mc', label: 'Nghe và chọn chữ cái đúng', speak: L.name, audioOnly: true, cols: 4,
-        options: [L].concat(others).map((x) => ({ label: h('span', { lang: 'ru' }, x.u + x.l), correct: x === L, big: true })),
-        answer: L.u + ' ' + L.l, onResult,
-      });
-      // chữ thường trông khác hẳn chữ hoa → hỏi thêm
-      if (opts.cases !== false && ['А', 'Б', 'Д', 'Е', 'Ё', 'Р', 'У', 'Ф'].includes(L.u)) {
-        const wrong = U.shuffle(pool.filter((x) => x.u !== L.u)).slice(0, 3);
-        qs.push({
-          type: 'mc', label: 'Chữ thường của chữ hoa này là?', prompt: h('span', { class: 'ru', lang: 'ru' }, L.u), huge: true, cols: 4,
-          options: [L].concat(wrong).map((x) => ({ label: h('span', { lang: 'ru' }, x.l), correct: x === L, big: true })),
-          answer: L.l, onResult,
-        });
-      }
+      qs.push(qLetterSound(L, pool), qListenLetter(L, pool));
+      if (opts.cases !== false && CASE_DIFF.includes(L.u)) qs.push(qCase(L, pool));
     });
     return qs;
   }
@@ -476,18 +486,71 @@
   });
 
   /* ======================= Tập đọc ======================= */
-  function readQuestions(words) {
-    return words.map(([ru, vi]) => {
-      const others = U.shuffle(words.filter((w) => w[0] !== ru)).slice(0, 3).map((w) => RU.translit(w[0], 'vi'));
-      const right = RU.translit(ru, 'vi');
-      return {
-        type: 'mc', label: 'Từ này đọc là gì?', prompt: h('span', { class: 'ru', lang: 'ru' }, RU.disp(ru)), big: true,
-        options: [{ label: right, correct: true }].concat(others.filter((o) => o !== right).map((o) => ({ label: o }))),
-        sayAfter: ru,
-        explain: h('span', null, ui.ru(ru), ' = ', h('b', null, vi)),
-      };
-    });
+  function qRead([ru, vi], words) {
+    const right = RU.translit(ru, 'vi');
+    const others = U.shuffle(words.filter((w) => w[0] !== ru)).map((w) => RU.translit(w[0], 'vi'))
+      .filter((o, i, a) => o !== right && a.indexOf(o) === i).slice(0, 3);
+    return {
+      type: 'mc', label: 'Từ này đọc là gì?', prompt: h('span', { class: 'ru', lang: 'ru' }, RU.disp(ru)), big: true,
+      options: [{ label: right, correct: true }].concat(others.map((o) => ({ label: o }))),
+      sayAfter: ru,
+      explain: h('span', null, ui.ru(ru), ' = ', h('b', null, vi)),
+    };
   }
+  function readQuestions(words) { return words.map((w) => qRead(w, words)); }
+  /** Nghe + xem nghĩa → tự gõ lại từ bằng chữ Kirin (khó nhất) */
+  function qTypeWord([ru, vi]) {
+    return {
+      type: 'type', label: 'Nghe rồi gõ lại từ này bằng chữ Kirin', big: true, prompt: h('span', null, vi), speak: ru,
+      answers: [ru], answer: () => h('span', null, ui.ru(ru), ' ', ui.tr(ru, true)),
+      placeholder: 'Gõ chữ Kirin, hoặc gõ Latinh: privet → привет',
+    };
+  }
+
+  /* ======================= Kiểm tra tổng hợp ======================= */
+  /** Câu hỏi của bài l và các bài trước: chữ cái (độ khó 1, 2, 4) và từ đọc (độ khó 3, 4) */
+  function alphaTestCands(l) {
+    const upto = A.lessons.filter((x) => x.id <= l.id);
+    const poolIdx = [];
+    upto.forEach((x) => poolIdx.push(...x.letterIdx));
+    const pool = (poolIdx.length >= 6 ? poolIdx : LET.map((L) => L.i)).map((i) => LET[i]);
+    const allWords = [];
+    upto.forEach((x) => allWords.push(...x.words));
+    const cands = (x) => {
+      const from = { label: 'Bài ' + x.id, href: '#/alphabet/lesson/' + x.id };
+      const out = [];
+      x.letterIdx.forEach((i) => {
+        const L = LET[i]; const key = 'L' + i;
+        out.push({ d: 1, key, from, make: () => qLetterSound(L, pool) });
+        out.push({ d: 2, key, from, make: () => qListenLetter(L, pool) });
+        if (CASE_DIFF.includes(L.u)) out.push({ d: 2, key, from, make: () => qCase(L, pool) });
+        out.push({ d: 4, key, from, make: () => writeQuestion(L, Math.random() < 0.5 ? 'u' : 'l', letterResult(L)) });
+      });
+      x.words.forEach((w) => {
+        const key = 'W' + w[0];
+        out.push({ d: 3, key, from, make: () => qRead(w, allWords) });
+        out.push({ d: 4, key, from, make: () => qTypeWord(w) });
+      });
+      return out;
+    };
+    const prev = [];
+    upto.filter((x) => x.id < l.id).forEach((x) => prev.push(...cands(x)));
+    return { cur: cands(l), prev };
+  }
+  RU.route('alphabet/lesson/:n/test', (ctx) => {
+    const l = A.lessons.find((x) => String(x.id) === ctx.params.n);
+    if (!l) return RU.go('alphabet');
+    const nextL = A.lessons.find((x) => x.id === l.id + 1);
+    RU.Test.run(ctx, {
+      key: 'a:' + l.id,
+      title: 'Kiểm tra · ' + (l.id > 1 ? 'Bài 1–' + l.id : 'Bài 1'),
+      count: 10 + (l.id - 1),
+      level: (l.id - 1) / Math.max(1, A.lessons.length - 1),
+      cands: () => alphaTestCands(l),
+      back: { href: '#/alphabet/lesson/' + l.id, label: 'Về bài học' },
+      next: nextL ? { href: '#/alphabet/lesson/' + nextL.id, label: 'Sang bài ' + nextL.id } : { href: '#/vocab', label: 'Học từ vựng' },
+    });
+  });
   RU.route('alphabet/lesson/:n/read', (ctx) => {
     const l = A.lessons.find((x) => String(x.id) === ctx.params.n);
     if (!l) return RU.go('alphabet');
@@ -499,7 +562,10 @@
         const s = lessonState(l.id);
         s.read = Math.max(s.read || 0, r.pct);
         RU.store.save();
-        if (lessonDone(l.id)) return h('div', { class: 'callout ok' }, '🎉 Hoàn thành Bài ' + l.id + '!');
+        if (lessonDone(l.id)) {
+          return h('div', { class: 'callout ok' }, '🎉 Hoàn thành Bài ' + l.id + '! Bước cuối: ',
+            h('a', { href: '#/alphabet/lesson/' + l.id + '/test' }, 'làm bài kiểm tra tổng hợp' + (l.id > 1 ? ' (bài 1–' + l.id + ')' : '') + ' →'));
+        }
         return null;
       },
     });

@@ -77,11 +77,52 @@
   }
   const starsOf = (sc) => (sc >= 0.92 ? 3 : sc >= 0.75 ? 2 : sc >= 0.5 ? 1 : 0);
 
+  /**
+   * Trình duyệt có sẵn đối tượng SpeechRecognition nhưng không có dịch vụ nhận dạng (của Google) phía sau:
+   * bấm micro vẫn ghi âm được, còn nhận dạng thì luôn trả về rỗng. Trả về tên trình duyệt, hoặc ''.
+   */
+  function blockedBrowser() {
+    const ua = navigator.userAgent || '';
+    const brands = ((navigator.userAgentData && navigator.userAgentData.brands) || []).map((b) => b.brand).join(' ');
+    if (/\bOPR\/|\bOpera\b/.test(ua) || /Opera/i.test(brands)) return 'Opera';
+    if (/Vivaldi/i.test(ua) || /Vivaldi/i.test(brands)) return 'Vivaldi';
+    if (navigator.brave || /Brave/i.test(brands)) return 'Brave';
+    if (/coc_coc_browser/i.test(ua) || /coc ?coc/i.test(brands)) return 'Cốc Cốc';
+    return '';
+  }
+
+  /** Đo độ to của micro trong lúc nghe (để phân biệt «không nói gì» với «nói rồi mà máy không nhận ra») */
+  function levelMeter(stream) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!stream || !AC) return null;
+    try {
+      const ac = new AC();
+      if (ac.resume) ac.resume().catch(() => {});
+      const an = ac.createAnalyser();
+      an.fftSize = 1024;
+      ac.createMediaStreamSource(stream).connect(an);
+      const buf = new Float32Array(an.fftSize);
+      const m = { peak: 0 };
+      const timer = setInterval(() => {
+        an.getFloatTimeDomainData(buf);
+        let s = 0;
+        for (let i = 0; i < buf.length; i++) s += buf[i] * buf[i];
+        m.peak = Math.max(m.peak, Math.sqrt(s / buf.length));
+      }, 80);
+      m.stop = () => { clearInterval(timer); try { ac.close(); } catch (e) { /* bỏ qua */ } };
+      return m;
+    } catch (e) { return null; }
+  }
+
   /* ---------------- nghe + ghi âm ---------------- */
   const Speech = {
-    get srSupported() { return !!getSR(); },
+    get srSupported() { return !!getSR() && !blockedBrowser(); },
+    /** Tên trình duyệt có nút micro nhưng không chấm được phát âm (Opera, Vivaldi, Brave, Cốc Cốc), hoặc '' */
+    get blockedBrowser() { return getSR() ? blockedBrowser() : ''; },
     get recSupported() { return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder); },
     noConcurrent: false, // trình duyệt không cho vừa nhận dạng vừa ghi âm
+    SPOKE: 0.02,         // độ to (RMS) coi là có tiếng nói
+    QUIET: 0.004,        // dưới mức này: micro gần như không thu được âm thanh
     numWords, norm, words, score, starsOf,
 
     /**
@@ -90,19 +131,24 @@
      */
     async listen(opts) {
       const SR = getSR();
-      const useSR = !!SR && opts.recognize !== false;
+      const useSR = Speech.srSupported && opts.recognize !== false;
       const ctl = { stop() {} };
       let stream = null; let recorder = null; const chunks = [];
       let ended = false;
+      let meter = null;
+      let heardAny = false; // nhận dạng có trả về chữ nào không (kể cả kết quả tạm)
 
       const finish = () => {
         if (ended) return;
         ended = true;
         clearTimeout(ctl.timer);
+        const peak = meter ? meter.peak : null;
+        if (meter) meter.stop();
         const done = () => {
           if (stream) stream.getTracks().forEach((t) => t.stop());
           const audioUrl = chunks.length ? URL.createObjectURL(new Blob(chunks, { type: (recorder && recorder.mimeType) || 'audio/webm' })) : null;
-          if (opts.onEnd) opts.onEnd({ audioUrl });
+          // peak: độ to lớn nhất của micro (null nếu không đo được); heardAny: máy có nhận ra chữ nào không
+          if (opts.onEnd) opts.onEnd({ audioUrl, peak, heardAny, recognized: useSR });
         };
         if (recorder && recorder.state !== 'inactive') { recorder.onstop = done; try { recorder.stop(); } catch (e) { done(); } }
         else done();
@@ -114,6 +160,7 @@
           recorder = new MediaRecorder(stream);
           recorder.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
           recorder.start();
+          meter = levelMeter(stream);
         } catch (e) {
           stream = null; recorder = null;
           if (!useSR) {
@@ -132,6 +179,7 @@
         r.continuous = false;
         let finalAlts = null;
         r.onresult = (ev) => {
+          heardAny = true;
           let interim = '';
           for (let i = ev.resultIndex; i < ev.results.length; i++) {
             const res = ev.results[i];
